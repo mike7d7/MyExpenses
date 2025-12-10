@@ -25,9 +25,20 @@ jobs:
     - name: Build with Gradle
       run: ./gradlew assembleRelease
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
+    - name: Sign app APK
+      uses: r0adkll/sign-android-release@v1
+
+      # ID used to access action output
+      id: sign_app
       with:
-        name: android-apk
-        path: |
-          myExpenses/build/outputs/apk/extern/release/*.apk
+        releaseDirectory: myExpenses/build/outputs/apk/extern/release
+        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+        alias: ${{ secrets.ALIAS }}
+        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+        # keyPassword: ${{ secrets.KEY_PASSWORD }}
+  
+    # Example use of `signedReleaseFile` output -- not needed
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Signed app bundle
+        path: ${{steps.sign_app.outputs.signedReleaseFile}}
