@@ -15,7 +15,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.database.getLongOrNull
 import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -85,6 +84,7 @@ import org.totschnig.myexpenses.model.SortDirection
 import org.totschnig.myexpenses.model2.Bank
 import org.totschnig.myexpenses.preference.ColorSource
 import org.totschnig.myexpenses.preference.PrefKey
+import org.totschnig.myexpenses.preference.PreferenceAccessor
 import org.totschnig.myexpenses.preference.enumValueOrDefault
 import org.totschnig.myexpenses.provider.BaseTransactionProvider
 import org.totschnig.myexpenses.provider.BaseTransactionProvider.Companion.balanceUri
@@ -121,11 +121,11 @@ import org.totschnig.myexpenses.provider.TransactionProvider.QUERY_PARAMETER_MAP
 import org.totschnig.myexpenses.provider.TransactionProvider.QUERY_PARAMETER_MERGE_CURRENCY_AGGREGATES
 import org.totschnig.myexpenses.provider.TransactionProvider.SORT_URI
 import org.totschnig.myexpenses.provider.TransactionProvider.TRANSACTIONS_URI
+import org.totschnig.myexpenses.provider.TransactionProvider.UNSPLIT_URI
 import org.totschnig.myexpenses.provider.TransactionProvider.URI_SEGMENT_LINK_TRANSFER
 import org.totschnig.myexpenses.provider.TransactionProvider.URI_SEGMENT_TOGGLE_CRSTATUS
 import org.totschnig.myexpenses.provider.TransactionProvider.URI_SEGMENT_TRANSFORM_TO_TRANSFER
 import org.totschnig.myexpenses.provider.TransactionProvider.URI_SEGMENT_UNLINK_TRANSFER
-import org.totschnig.myexpenses.provider.TransactionProvider.URI_SEGMENT_UNSPLIT
 import org.totschnig.myexpenses.provider.appendBooleanQueryParameter
 import org.totschnig.myexpenses.provider.asSequence
 import org.totschnig.myexpenses.provider.filter.CrStatusCriterion
@@ -163,10 +163,6 @@ open class MyExpensesViewModel(
     val savedStateHandle: SavedStateHandle,
 ) : PrintViewModel(application) {
 
-    private val showStatusHandlePrefKey = booleanPreferencesKey("showStatusHandle")
-    private val showEquivalentWorthPrefKey = booleanPreferencesKey("showEquivalentWorth")
-    private val preferredSearchTypePrefKey = intPreferencesKey("preferredSearchType")
-
     var showBalanceSheet: Boolean
         get() {
             val get = savedStateHandle.get<Boolean>("showBalanceSheet")
@@ -176,30 +172,33 @@ open class MyExpensesViewModel(
             savedStateHandle["showBalanceSheet"] = value
         }
 
-    fun showStatusHandle() =
-        dataStore.data.map { preferences ->
-            preferences[showStatusHandlePrefKey] != false
-        }
-
-    fun showEquivalentWorth() =
-        dataStore.data.map { preferences ->
-            preferences[showEquivalentWorthPrefKey] == true
-        }
-
-    fun persistShowStatusHandle(showStatus: Boolean) {
-        viewModelScope.launch {
-            dataStore.edit { preference ->
-                preference[showStatusHandlePrefKey] = showStatus
-            }
-        }
+    val showStatusHandle by lazy {
+        PreferenceAccessor(dataStore, booleanPreferencesKey("showStatusHandle"), defaultValue = true)
     }
 
-    fun persistShowEquivalentWorth(showEquivalentWort: Boolean) {
-        viewModelScope.launch {
-            dataStore.edit { preference ->
-                preference[showEquivalentWorthPrefKey] = showEquivalentWort
-            }
-        }
+    val showEquivalentWorth by lazy {
+        PreferenceAccessor(dataStore,
+            booleanPreferencesKey("showEquivalentWorth"), defaultValue = false)
+    }
+
+    val preferredSearchType by lazy {
+        PreferenceAccessor(dataStore,
+            intPreferencesKey("preferredSearchType"), defaultValue = TYPE_COMPLEX)
+    }
+
+    val balanceSheetShowChart by lazy {
+        PreferenceAccessor(dataStore,
+            booleanPreferencesKey("balanceSheetShowChart"), defaultValue = false)
+    }
+
+    val balanceSheetShowHidden by lazy {
+        PreferenceAccessor(dataStore,
+            booleanPreferencesKey("balanceSheetShowHidden"), defaultValue = true)
+    }
+
+    val balanceSheetShowZero by lazy {
+        PreferenceAccessor(dataStore,
+            booleanPreferencesKey("balanceSheetShowZero"), defaultValue = true)
     }
 
     val listState = LazyListState(0, 0)
@@ -306,19 +305,6 @@ open class MyExpensesViewModel(
                 it[prefHandler.getStringPreferencesKey(PrefKey.ACCOUNT_GROUPING)],
                 AccountGrouping.TYPE
             )
-        }
-    }
-
-    fun preferredSearchType() =
-        dataStore.data.map { preferences ->
-            preferences[preferredSearchTypePrefKey] ?: TYPE_COMPLEX
-        }
-
-    fun persistPreferredSearchType(searchType: Int) {
-        viewModelScope.launch {
-            dataStore.edit { preference ->
-                preference[preferredSearchTypePrefKey] = searchType
-            }
         }
     }
 
@@ -747,11 +733,11 @@ open class MyExpensesViewModel(
             put(KEY_ROWID, id)
         }
         if (contentResolver.update(
-                TRANSACTIONS_URI.buildUpon().appendPath(URI_SEGMENT_UNSPLIT).build(),
+                UNSPLIT_URI,
                 values,
                 null,
                 null
-            ) == 1
+            ) > 0
         ) {
             emit(ResultUnit)
         } else {

@@ -11,6 +11,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver.OnGlobalLayoutListener
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -86,6 +87,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import myiconpack.IcActionTemplateAdd
 import org.totschnig.myexpenses.R
 import org.totschnig.myexpenses.compose.AccountList
 import org.totschnig.myexpenses.compose.AppTheme
@@ -178,10 +180,12 @@ import org.totschnig.myexpenses.util.ContribUtils
 import org.totschnig.myexpenses.util.TextUtils
 import org.totschnig.myexpenses.util.TextUtils.withAmountColor
 import org.totschnig.myexpenses.util.Utils
+import org.totschnig.myexpenses.util.ads.AdHandler
+import org.totschnig.myexpenses.util.ads.NoOpAdHandler
 import org.totschnig.myexpenses.util.checkMenuIcon
 import org.totschnig.myexpenses.util.configureSortDirectionMenu
 import org.totschnig.myexpenses.util.convAmount
-import org.totschnig.myexpenses.util.crashreporting.CrashHandler
+import org.totschnig.myexpenses.util.crashreporting.CrashHandler.Companion.report
 import org.totschnig.myexpenses.util.distrib.DistributionHelper
 import org.totschnig.myexpenses.util.distrib.DistributionHelper.isGithub
 import org.totschnig.myexpenses.util.distrib.ReviewManager
@@ -226,8 +230,11 @@ import kotlin.math.sign
 const val DIALOG_TAG_OCR_DISAMBIGUATE = "DISAMBIGUATE"
 const val DIALOG_TAG_NEW_BALANCE = "NEW_BALANCE"
 
-abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, ContribIFace,
+open class MyExpenses : LaunchActivity(), OnDialogResultListener, ContribIFace,
     NewProgressDialogFragment.Host {
+
+    private lateinit var adHandler: AdHandler
+
     override val fabActionName = "CREATE_TRANSACTION"
 
     private val accountData: List<FullAccount>
@@ -455,8 +462,10 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
 
             R.id.SHOW_STATUS_HANDLE_COMMAND -> {
                 currentAccount?.let {
-                    viewModel.persistShowStatusHandle(!item.isChecked)
-                    invalidateOptionsMenu()
+                    lifecycleScope.launch {
+                        viewModel.showStatusHandle.set(!item.isChecked)
+                        invalidateOptionsMenu()
+                    }
                 }
                 true
             }
@@ -749,8 +758,9 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                                 { toggleDynamicExchangeRate(it) }
                             } else null,
                             listState = viewModel.listState,
-                            showEquivalentWorth = viewModel.showEquivalentWorth()
-                                .collectAsState(false).value,
+                            showEquivalentWorth = viewModel.showEquivalentWorth.flow
+                                .collectAsState(false).value &&
+                                    data.any { it.isHomeAggregate },
                             expansionHandlerGroups = viewModel.expansionHandler("collapsedHeadersDrawer_${accountGrouping.value}"),
                             expansionHandlerAccounts = viewModel.expansionHandler("expandedAccounts"),
                             bankIcon = { modifier, id ->
@@ -956,7 +966,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
             getChildAt(0)?.isVerticalScrollBarEnabled = false
             lifecycleScope.launch {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    viewModel.showEquivalentWorth().collect {
+                    viewModel.showEquivalentWorth.flow.collect {
                         configureEquivalentWorthMenuItemIcon(
                             menu.findItem(R.id.EQUIVALENT_WORTH_COMMAND),
                             it
@@ -979,6 +989,39 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
         if (viewModel.showBalanceSheet) {
             openBalanceSheet()
         }
+
+        adHandler = adHandlerFactory.create(binding.viewPagerMain.adContainer, this)
+        if (adHandler != NoOpAdHandler) {
+            binding.viewPagerMain.adContainer.getViewTreeObserver().addOnGlobalLayoutListener(
+                object : OnGlobalLayoutListener {
+                    override fun onGlobalLayout() {
+                        binding.viewPagerMain.adContainer.getViewTreeObserver()
+                            .removeOnGlobalLayoutListener(this)
+                        adHandler.startBanner()
+                    }
+                })
+            try {
+                adHandler.maybeRequestNewInterstitial()
+            } catch (e: Exception) {
+                report(e)
+            }
+        }
+
+        if (!isScanMode()) {
+            floatingActionButton.setVisibility(View.INVISIBLE)
+        }
+
+        if (savedInstanceState == null) {
+            intent.extras?.let {
+                val fromExtra = Utils.getFromExtra(it, KEY_ROWID, 0)
+                if (fromExtra != 0L) {
+                    selectedAccountId = fromExtra
+                }
+                showTransactionFromIntent(it)
+            }
+        }
+
+        reviewManager.init(this)
     }
 
     override fun onPdfResultProcessed() {
@@ -1055,7 +1098,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                     }
                     val coroutineScope = rememberCoroutineScope()
                     val preferredSearchType =
-                        viewModel.preferredSearchType().collectAsState(TYPE_COMPLEX).value
+                        viewModel.preferredSearchType.flow.collectAsState(TYPE_COMPLEX).value
                     if (showFilterDialog) {
                         currentAccount?.let {
                             FilterDialog(
@@ -1070,7 +1113,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                                     showFilterDialog = false
                                 }, onConfirmRequest = { preferredSearchType, criterion ->
                                     coroutineScope.launch {
-                                        viewModel.persistPreferredSearchType(preferredSearchType)
+                                        viewModel.preferredSearchType.set(preferredSearchType)
                                         currentFilter.persist(criterion)
                                         showFilterDialog = false
                                         invalidateOptionsMenu()
@@ -1126,7 +1169,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
         val showStatusHandle = if (account.isAggregate || !account.type.supportsReconciliation)
             false
         else
-            viewModel.showStatusHandle().collectAsState(initial = true).value
+            viewModel.showStatusHandle.flow.collectAsState(initial = true).value
 
         val onToggleCrStatus: ((Long) -> Unit)? = if (showStatusHandle) {
             {
@@ -1261,7 +1304,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                                                 })
                                             add(
                                                 MenuEntry(
-                                                    icon = myiconpack.IcActionTemplateAdd,
+                                                    icon = IcActionTemplateAdd,
                                                     label = R.string.menu_create_template_from_transaction,
                                                     command = "CREATE_TEMPLATE_FROM_TRANSACTION"
                                                 ) { createTemplate(transaction) })
@@ -1353,7 +1396,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                                                                     )
                                                                 })
                                                         } else {
-                                                            CrashHandler.report(
+                                                            report(
                                                                 IllegalStateException("Category path is null")
                                                             )
                                                         }
@@ -1378,7 +1421,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                                                     if (transaction.methodId != null) {
                                                         val label =
                                                             transaction.methodLabel!!.translateIfPredefined(
-                                                                this@BaseMyExpenses
+                                                                this@MyExpenses
                                                             )
                                                         add(
                                                             MenuEntry(
@@ -1461,7 +1504,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                     renderer = when (viewModel.renderer.collectAsState(initial = RenderType.New).value) {
                         RenderType.New -> {
                             NewTransactionRenderer(
-                                dateTimeFormatter(account, prefHandler, this@BaseMyExpenses),
+                                dateTimeFormatter(account, prefHandler, this@MyExpenses),
                                 withCategoryIcon,
                                 colorSource,
                                 onToggleCrStatus
@@ -1473,7 +1516,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                                 dateTimeFormatterLegacy(
                                     account,
                                     prefHandler,
-                                    this@BaseMyExpenses
+                                    this@MyExpenses
                                 )?.let {
                                     DateTimeFormatInfo(
                                         (it.first as SimpleDateFormat).asDateTimeFormatter,
@@ -1788,7 +1831,9 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
 
     fun handleNavigationClick(item: MenuItem) = when (item.itemId) {
         R.id.EQUIVALENT_WORTH_COMMAND -> {
-            viewModel.persistShowEquivalentWorth(!item.isChecked)
+            lifecycleScope.launch {
+                viewModel.showEquivalentWorth.set(!item.isChecked)
+            }
             true
         }
 
@@ -1971,7 +2016,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
             R.id.SHARE_COMMAND -> startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                 putExtra(
                     Intent.EXTRA_TEXT,
-                    Utils.getTellAFriendMessage(this@BaseMyExpenses).toString()
+                    Utils.getTellAFriendMessage(this@MyExpenses).toString()
                 )
                 setType("text/plain")
             }, getResources().getText(R.string.menu_share)))
@@ -2067,7 +2112,10 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                             }.onFailure {
                                 showDismissibleSnackBar(it.safeMessage)
                             }
-                    }
+                    },
+                    showHiddenState = viewModel.balanceSheetShowHidden.asState(),
+                    showZeroState = viewModel.balanceSheetShowZero.asState(),
+                    showChartState = viewModel.balanceSheetShowChart.asState(),
                 )
             }
         }
@@ -2167,7 +2215,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                 }
 
                 menu.findItem(R.id.SORT_MENU)?.subMenu?.let {
-                    configureSortDirectionMenu(this@BaseMyExpenses, it, sortBy, sortDirection)
+                    configureSortDirectionMenu(this@MyExpenses, it, sortBy, sortDirection)
                 }
 
                 menu.findItem(R.id.BALANCE_COMMAND)
@@ -2177,7 +2225,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                     setEnabledAndVisible(reconciliationAvailable)
                     if (reconciliationAvailable) {
                         lifecycleScope.launch {
-                            isChecked = viewModel.showStatusHandle().first()
+                            isChecked = viewModel.showStatusHandle.flow.first()
                             checkMenuIcon(this@apply, R.drawable.ic_square)
                         }
                     }
@@ -2187,7 +2235,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                 menu.findItem(R.id.FINTS_SYNC_COMMAND)?.apply {
                     setEnabledAndVisible(bankId != null)
                     if (bankId != null) {
-                        title = bankingFeature.syncMenuTitle(this@BaseMyExpenses)
+                        title = bankingFeature.syncMenuTitle(this@MyExpenses)
                     }
                 }
                 menu.findItem(R.id.ARCHIVE_COMMAND)
@@ -2285,7 +2333,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                         )
                             .show(supportFragmentManager, "CRITERION")
                     } ?: run {
-                        CrashHandler.report(Exception("Progress is visible, but no criterion is defined"))
+                        report(Exception("Progress is visible, but no criterion is defined"))
                     }
                 }
             }
@@ -2381,12 +2429,12 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                     )
                     contentDescription =
                         getString(if (sign > 0) R.string.saving_goal else R.string.credit_limit) + ": " +
-                                DisplayProgress.contentDescription(this@BaseMyExpenses, progress)
+                                DisplayProgress.contentDescription(this@MyExpenses, progress)
                 }
 
                 with(binding.toolbar.progressPercent) {
                     text = progress.displayProgress
-                    setTextColor(this@BaseMyExpenses.getAmountColor(sign))
+                    setTextColor(this@MyExpenses.getAmountColor(sign))
                 }
             }
         }
@@ -2404,12 +2452,12 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                 )
                 contentDescription =
                     getString(if (sign > 0) R.string.saving_goal else R.string.credit_limit) + ": " +
-                            DisplayProgress.contentDescription(this@BaseMyExpenses, progress)
+                            DisplayProgress.contentDescription(this@MyExpenses, progress)
             }
 
             with(binding.toolbar.progressPercent) {
                 text = progress.displayProgress
-                setTextColor(this@BaseMyExpenses.getAmountColor(sign))
+                setTextColor(this@MyExpenses.getAmountColor(sign))
             }
         }
     }
@@ -2449,7 +2497,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                 sealed -> getString(R.string.content_description_closed)
                 scanMode -> getString(R.string.contrib_feature_ocr_label)
                 else -> TextUtils.concatResStrings(
-                    this@BaseMyExpenses,
+                    this@MyExpenses,
                     ". ",
                     R.string.menu_create_transaction,
                     R.string.menu_create_transfer,
@@ -2687,7 +2735,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
         currentAccount?.let {
             with(it) {
                 exportViewModel.hasExported(this)
-                    .observe(this@BaseMyExpenses) { hasExported ->
+                    .observe(this@MyExpenses) { hasExported ->
                         ExportDialogFragment.newInstance(
                             ExportDialogFragment.AccountInfo(
                                 id,
@@ -2734,7 +2782,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                 ) {
                     prefHandler.putBoolean(PrefKey.SYNC_UPSELL_NOTIFICATION_SHOWN, true)
                     ContribUtils.showContribNotification(
-                        this@BaseMyExpenses,
+                        this@MyExpenses,
                         ContribFeature.SYNCHRONIZATION
                     )
                 }
@@ -2822,7 +2870,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                                 } else getString(R.string.split_transaction_not_possible)
                             },
                             onFailure = {
-                                CrashHandler.report(it)
+                                report(it)
                                 it.safeMessage
                             }
                         ))
@@ -2834,7 +2882,7 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
                     result.onSuccess {
                         showSnackBar(getString(R.string.ungroup_split_transaction_success))
                     }.onFailure {
-                        CrashHandler.report(it)
+                        report(it)
                         showSnackBar(it.safeMessage)
                     }
                 }
@@ -2878,9 +2926,9 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
     }
 
     private fun LiveData<Result<Unit>>.observeAndReportFailure() {
-        observe(this@BaseMyExpenses) { result ->
+        observe(this@MyExpenses) { result ->
             result.onFailure {
-                CrashHandler.report(it)
+                report(it)
                 showSnackBar(it.safeMessage)
             }
         }
@@ -2893,6 +2941,9 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
         }
     }
 
+    /**
+     * Currently not used
+     */
     protected fun voteReminderCheck() {
         val prefKey = "vote_reminder_shown_${RoadmapRepository.VERSION}"
         if (!prefHandler.getBoolean(prefKey, false) && Utils.getDaysSinceUpdate(this) > 1) {
@@ -2909,6 +2960,23 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
             }
         }
     }
+
+    /**
+     * Can be used to ask user who has already voted to update their vote. Currently not used
+     */
+    /*  private void voteReminderCheck2() {
+        roadmapViewModel.getShouldShowVoteReminder().observe(this, shouldShow -> {
+          if (shouldShow) {
+            prefHandler.putLong(PrefKey.VOTE_REMINDER_LAST_CHECK, System.currentTimeMillis());
+            showSnackBar(getString(R.string.reminder_vote_update), Snackbar.LENGTH_INDEFINITE,
+                    new SnackbarAction(getString(R.string.vote_reminder_action), v -> {
+              Intent intent = new Intent(this, RoadmapVoteActivity.class);
+              startActivity(intent);
+            }));
+          }
+        });
+      }*/
+
 
     fun showTransactionFromIntent(extras: Bundle) {
         val idFromNotification = extras.getLong(KEY_TRANSACTIONID, 0)
@@ -2931,6 +2999,44 @@ abstract class BaseMyExpenses : LaunchActivity(), OnDialogResultListener, Contri
         if (!isGithub && feature == ContribFeature.AD_FREE) {
             finish()
         }
+    }
+
+    override fun onActivityResult(
+        requestCode: Int, resultCode: Int,
+        intent: Intent?,
+    ) {
+        super.onActivityResult(requestCode, resultCode, intent)
+        if (requestCode == EDIT_REQUEST) {
+            floatingActionButton.show()
+            if (resultCode == RESULT_OK) {
+                if (!adHandler.onEditTransactionResult()) {
+                    reviewManager.onEditTransactionResult(this)
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.extras?.let {
+            selectedAccountId = it.getLong(KEY_ROWID)
+            showTransactionFromIntent(it)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        adHandler.onResume()
+    }
+
+    public override fun onDestroy() {
+        adHandler.onDestroy()
+        super.onDestroy()
+    }
+
+    override fun onPause() {
+        adHandler.onPause()
+        super.onPause()
     }
 
     companion object {
