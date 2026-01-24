@@ -205,7 +205,8 @@ fun Repository.loadTemplateIfInstanceIsOpen(templateId: Long, instanceId: Long) 
         templateId,
         selection = "$KEY_ROWID = ? AND $IS_OPEN_CHECK",
         selectionArgs = arrayOf(templateId.toString(), instanceId.toString()),
-        require = false
+        require = false,
+        withTags = true
     )
 
 fun Repository.loadTemplateForPlanIfInstanceIsOpen(planId: Long, instanceId: Long) =
@@ -213,7 +214,8 @@ fun Repository.loadTemplateForPlanIfInstanceIsOpen(planId: Long, instanceId: Lon
         planId,
         selection = "$KEY_PLANID = ? AND $IS_OPEN_CHECK",
         selectionArgs = arrayOf(planId.toString(), instanceId.toString()),
-        require = false
+        require = false,
+        withTags = true
     )
 
 fun Repository.loadTemplate(
@@ -443,7 +445,7 @@ suspend fun Repository.instantiateTemplate(
     val template = (if (ifOpen) loadTemplateIfInstanceIsOpen(
         planInstanceInfo.templateId,
         planInstanceInfo.instanceId!!
-    ) else loadTemplate(planInstanceInfo.templateId, withTags = true)) ?: return null
+    ) else loadTemplate(planInstanceInfo.templateId, withTags = true, require = false)) ?: return null
 
     val t = createTransaction(
         template.instantiate(currencyContext, exchangeRateHandler, planInstanceInfo)

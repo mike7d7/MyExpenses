@@ -32,11 +32,12 @@ import org.totschnig.myexpenses.util.epochMillis2LocalDate
 import org.totschnig.myexpenses.util.getDateTimeFormatter
 import org.totschnig.myexpenses.util.safeMessage
 import org.totschnig.myexpenses.util.ui.preferredDatePickerBuilder
+import org.totschnig.myexpenses.viewmodel.data.FullAccount
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
-class RemapHandler(val activity: MyExpenses) : FragmentResultListener {
+class RemapHandler(val activity: BaseMyExpenses<*>) : FragmentResultListener {
 
     init {
         for (requestKey in listOf(MAP_ACCOUNT_REQUEST, MAP_METHOD_REQUEST)) {
@@ -241,7 +242,7 @@ class RemapHandler(val activity: MyExpenses) : FragmentResultListener {
                 val hasIncome = selectionState.any { it.amount.amountMinor > 0 }
                 val accountTypes = if (currentAccount!!.isAggregate)
                     selectionState.mapNotNull { it.accountType }.distinct().toLongArray()
-                else longArrayOf(currentAccount!!.type.id)
+                else longArrayOf((currentAccount as FullAccount).type.id)
                 val type = when {
                     hasExpense && !hasIncome -> -1
                     hasIncome && !hasExpense -> 1

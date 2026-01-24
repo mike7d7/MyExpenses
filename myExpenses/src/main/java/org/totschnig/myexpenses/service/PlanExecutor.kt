@@ -19,15 +19,12 @@ import org.totschnig.myexpenses.BuildConfig
 import org.totschnig.myexpenses.MyApplication
 import org.totschnig.myexpenses.R
 import org.totschnig.myexpenses.activity.ExpenseEdit
-import org.totschnig.myexpenses.activity.MyExpenses
 import org.totschnig.myexpenses.db2.Repository
 import org.totschnig.myexpenses.db2.createTransaction
 import org.totschnig.myexpenses.db2.getLabelForAccount
 import org.totschnig.myexpenses.db2.linkTemplateWithTransaction
-import org.totschnig.myexpenses.db2.loadTagsForTemplate
 import org.totschnig.myexpenses.db2.loadTemplateForPlanIfInstanceIsOpen
 import org.totschnig.myexpenses.db2.planCount
-import org.totschnig.myexpenses.db2.saveTagsForTransaction
 import org.totschnig.myexpenses.injector
 import org.totschnig.myexpenses.model.CurrencyContext
 import org.totschnig.myexpenses.model.Money
@@ -248,20 +245,8 @@ class PlanExecutor(context: Context, workerParameters: WorkerParameters) :
                                         currencyContext, exchangeRateHandler, PlanInstanceInfo(template.id, instanceId, date)
                                     ))
                                     repository.linkTemplateWithTransaction(template.id, transaction.id, instanceId)
-                                    val displayIntent: Intent =
-                                        Intent(applicationContext, MyExpenses::class.java)
-                                            .putExtra(
-                                                KEY_ROWID,
-                                                template.data.accountId
-                                            )
-                                            .putExtra(
-                                                KEY_TRANSACTIONID,
-                                                transaction.id
-                                            )
-                                    resultIntent = PendingIntent.getActivity(
-                                        applicationContext, notificationId, displayIntent,
-                                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                                    )
+
+                                    resultIntent = prefHandler.createShowDetailsIntent(applicationContext, notificationId, transaction.data)
                                     builder.setContentIntent(resultIntent)
                                     builder.setAutoCancel(true)
                                     notification = builder.build()
