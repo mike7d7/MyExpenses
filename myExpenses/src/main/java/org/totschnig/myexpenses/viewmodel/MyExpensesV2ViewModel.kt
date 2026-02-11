@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.totschnig.myexpenses.activity.StartScreen
-import org.totschnig.myexpenses.compose.accounts.AccountScreenTab
+import org.totschnig.myexpenses.compose.accounts.AccountsScreenTab
 import org.totschnig.myexpenses.compose.transactions.Action
 import org.totschnig.myexpenses.model.AccountFlag
 import org.totschnig.myexpenses.model.AccountGrouping
@@ -245,7 +245,7 @@ class MyExpensesV2ViewModel(
             if (selectedAccountId.value == 0L) {
                 groupingMap.getValue(
                     aggregateKey(
-                        accountGrouping.flow.first(),
+                        accountGrouping.get(),
                         _activeFilter.value
                     )
                 ).set(grouping)
@@ -260,7 +260,7 @@ class MyExpensesV2ViewModel(
             if (selectedAccountId.value == 0L) {
                 sortMap.getValue(
                     aggregateKey(
-                        accountGrouping.flow.first(),
+                        accountGrouping.get(),
                         _activeFilter.value
                     )
                 ).set(transactionSort)
@@ -282,11 +282,11 @@ class MyExpensesV2ViewModel(
         prefHandler.putString(PrefKey.UI_SCREEN_LAST_VISITED, screen.name)
     }
 
-    fun setLastVisited(accountScreenTab: AccountScreenTab) {
+    fun setLastVisited(accountsScreenTab: AccountsScreenTab) {
         setLastVisited(
-            when (accountScreenTab) {
-                AccountScreenTab.LIST -> StartScreen.Accounts
-                AccountScreenTab.BALANCE_SHEET -> StartScreen.BalanceSheet
+            when (accountsScreenTab) {
+                AccountsScreenTab.LIST -> StartScreen.Accounts
+                AccountsScreenTab.BALANCE_SHEET -> StartScreen.BalanceSheet
             }
         )
     }

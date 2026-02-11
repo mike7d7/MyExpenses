@@ -1,6 +1,7 @@
 package org.totschnig.myexpenses.viewmodel
 
 import android.app.Application
+import android.os.Bundle
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.SavedStateHandle
@@ -31,8 +32,9 @@ class HistoryViewModel(application: Application, val savedStateHandle: SavedStat
         }.stateIn(viewModelScope, SharingStarted.Lazily, defaultGrouping)
     }
 
-    fun accountInfo(accountId: Long) = combine(account(accountId), grouping) {
-        account, grouping -> account to grouping
+    fun accountInfo(extras: Bundle) = combine(account(extras), grouping) {
+        account, grouping ->
+        account to grouping
     }
 
     fun persistGrouping(grouping: Grouping) {

@@ -1491,10 +1491,17 @@ open class ExpenseEdit : AmountActivity<TransactionEditViewModel>(), ContribIFac
                         getString(R.string.save_transaction_and_new_success),
                         Snackbar.LENGTH_SHORT
                     )
+                    isSaving = false
                 } else doFinish()
             } else {
                 if (delegate.recurrenceSpinner.selectedItem === Recurrence.CUSTOM) {
-                    launchPlanView(true, transaction.planId!!)
+                    if (transaction.planId != null) {
+                        launchPlanView(true, transaction.planId)
+                    } else {
+                        CrashHandler.report(IllegalStateException("PlanId is null"))
+                        hideKeyboard()
+                        doFinish()
+                    }
                 } else { //make sure soft keyboard is closed
                     hideKeyboard()
                     doFinish()
@@ -1525,7 +1532,6 @@ open class ExpenseEdit : AmountActivity<TransactionEditViewModel>(), ContribIFac
                 }
             )
         }
-        isSaving = false
     }
 
     fun launchPlanView(forResult: Boolean, planId: Long) {

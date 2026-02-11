@@ -18,7 +18,6 @@ import org.totschnig.myexpenses.model.Grouping
 import org.totschnig.myexpenses.model.sort.SortDirection
 import org.totschnig.myexpenses.model2.AccountWithGroupingKey
 import org.totschnig.myexpenses.preference.PrefHandler
-import org.totschnig.myexpenses.provider.BaseTransactionProvider
 import org.totschnig.myexpenses.provider.DataBaseAccount
 import org.totschnig.myexpenses.provider.KEY_AMOUNT
 import org.totschnig.myexpenses.provider.KEY_BANK_ID
@@ -57,7 +56,6 @@ import org.totschnig.myexpenses.provider.KEY_SUM_TRANSFERS
 import org.totschnig.myexpenses.provider.KEY_SYNC_ACCOUNT_NAME
 import org.totschnig.myexpenses.provider.KEY_TOTAL
 import org.totschnig.myexpenses.provider.KEY_UUID
-import org.totschnig.myexpenses.provider.filter.Criterion
 import org.totschnig.myexpenses.provider.getBoolean
 import org.totschnig.myexpenses.provider.getDouble
 import org.totschnig.myexpenses.provider.getDoubleOrNull
@@ -74,15 +72,18 @@ import kotlin.math.sign
 
 sealed class BaseAccount : DataBaseAccount() {
     abstract val currencyUnit: CurrencyUnit
-    abstract val label: String
     abstract val type: AccountType?
     abstract val flag: AccountFlag?
     abstract fun toPageAccount(context: Context): PageAccount
     abstract fun color(resources: Resources): Int
     abstract val total: Long?
     abstract val equivalentTotal: Long?
-    open fun labelV2(context: Context) = label
+    abstract fun labelV2(context: Context): String
     fun aggregateColor(resources: Resources) = ResourcesCompat.getColor(resources, R.color.colorAggregate, null)
+    override val flagId: Long?
+        get() = flag?.id
+    override val typeId: Long?
+        get() = type?.id
 }
 
 @Stable
@@ -108,13 +109,10 @@ data class AggregateAccount(
     val hasCleared: Boolean = false,
     override val total: Long? = null,
     override val equivalentTotal: Long = total ?: 0,
-    val accountGrouping: AccountGrouping<*>
+    override val accountGrouping: AccountGrouping<*>
 ): BaseAccount() {
     override val id: Long = 0
     override val currency: String = currencyUnit.code
-
-    override val label: String
-        get() = throw UnsupportedOperationException("Use labelV2")
 
     override fun labelV2(context: Context): String = when(accountGrouping) {
         AccountGrouping.TYPE -> type!!.title(context) + " ($SIGMA)"
@@ -151,7 +149,7 @@ data class AggregateAccount(
 @Stable
 data class FullAccount(
     override val id: Long,
-    override val label: String,
+    val label: String,
     val description: String? = null,
     override val currencyUnit: CurrencyUnit,
     val color: Int = -1,
@@ -187,9 +185,13 @@ data class FullAccount(
     val dynamic: Boolean = false,
 ) : BaseAccount(), AccountWithGroupingKey {
 
+    override val accountGrouping: AccountGrouping<*>? = null
+
     override val currency: String = currencyUnit.code
 
     override fun color(resources: Resources) = if (isAggregate) aggregateColor(resources) else color
+
+    override fun labelV2(context: Context) = label
 
     val toPageAccount: PageAccount
         get() = PageAccount(
@@ -292,10 +294,14 @@ data class PageAccount(
     val currentBalance: Long = 0,
     val label: String,
     //not null for aggregate accounts
-    val accountGrouping: AccountGrouping<*>? = null,
+    override val accountGrouping: AccountGrouping<*>? = null,
     val color: Int = -1
 ) : DataBaseAccount() {
     override val currency: String = currencyUnit.code
+
+    override val flagId = flag?.id
+    override val typeId = type?.id
+
 
     //Pair of Uri / projection
     fun loadingInfo(prefHandler: PrefHandler): Pair<Uri, Array<String>> =
@@ -316,16 +322,4 @@ data class PageAccount(
         shortenComment = true,
         extended = extended
     )
-
-    fun groupingQueryV2(filter: Criterion?): Triple<Uri.Builder, String?, Array<String>?> {
-        val selection = filter?.getSelectionForParts()
-        val args = filter?.getSelectionArgs(true)
-        return Triple(
-            BaseTransactionProvider.groupingUriBuilder(grouping).apply {
-                appendQueryParameter(id, currency, type?.id, flag?.id, accountGrouping)
-            },
-            selection,
-            args
-        )
-    }
 }

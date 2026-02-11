@@ -3,7 +3,9 @@ package org.totschnig.myexpenses.compose.main
 import androidx.annotation.IdRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
@@ -29,12 +31,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -46,8 +48,9 @@ import org.totschnig.myexpenses.R
 import org.totschnig.myexpenses.activity.StartScreen
 import org.totschnig.myexpenses.compose.TooltipIconButton
 import org.totschnig.myexpenses.compose.accounts.AccountEventHandler
-import org.totschnig.myexpenses.compose.accounts.AccountScreenTab
 import org.totschnig.myexpenses.compose.accounts.AccountsScreen
+import org.totschnig.myexpenses.compose.accounts.AccountsScreenTab
+import org.totschnig.myexpenses.compose.accounts.EmptyState
 import org.totschnig.myexpenses.compose.transactions.Action
 import org.totschnig.myexpenses.compose.transactions.TransactionScreen
 import org.totschnig.myexpenses.dialog.MenuItem
@@ -114,16 +117,19 @@ fun MainScreen(
     onPrepareContextMenuItem: (itemId: Int) -> Boolean,
     onPrepareMenuItem: (itemId: Int) -> Boolean,
     flags: List<AccountFlag> = emptyList(),
-    pageContent: @Composable (pageAccount: PageAccount, accountCount: Int) -> Unit,
+    bankIcon: (@Composable (Modifier, Long) -> Unit)? = null,
+    pageContent: @Composable (pageAccount: PageAccount) -> Unit,
 ) {
 
     val accountGrouping = viewModel.accountGrouping.asState()
 
+    val onNavigateToSettings =
+        { onAppEvent(event = AppEvent.MenuItemClicked(R.id.SETTINGS_COMMAND)) }
     val navigationIcon: @Composable () -> Unit = {
         TooltipIconButton(
             tooltip = stringResource(R.string.settings_label),
-            imageVector = Icons.Default.Settings,
-        ) { onAppEvent(AppEvent.MenuItemClicked(R.id.SETTINGS_COMMAND)) }
+            imageVector = Icons.Default.Settings, onNavigateToSettings,
+        )
     }
 
     LaunchedEffect(Unit) {
@@ -131,10 +137,16 @@ fun MainScreen(
     }
 
     if (accounts.isEmpty()) {
-        EmptyState()
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            EmptyState(
+                onCreateAccount = { onAppEvent(event = AppEvent.CreateAccount) },
+                onNavigateToSettings = onNavigateToSettings
+            )
+        }
     } else {
-
-        require(accounts.isNotEmpty())
         val navController = rememberNavController()
 
         val showBottomSheetFor = remember { mutableStateOf<Screen?>(null) }
@@ -176,12 +188,13 @@ fun MainScreen(
                     onEvent = onAppEvent,
                     onPrepareContextMenuItem = onPrepareContextMenuItem,
                     onPrepareMenuItem = onPrepareMenuItem,
-                    pageContent = pageContent
+                    pageContent = pageContent,
+                    bankIcon = bankIcon
                 )
             }
             composable(Screen.Accounts.route) {
                 AccountsScreen(
-                    if (startScreen == StartScreen.BalanceSheet) AccountScreenTab.BALANCE_SHEET else AccountScreenTab.LIST,
+                    if (startScreen == StartScreen.BalanceSheet) AccountsScreenTab.BALANCE_SHEET else AccountsScreenTab.LIST,
                     navigationIcon = navigationIcon,
                     accounts = accounts,
                     accountGrouping = accountGrouping.value,
@@ -195,7 +208,8 @@ fun MainScreen(
                     },
                     onEvent = onAppEvent,
                     onAccountEvent = onAccountEvent,
-                    flags = flags
+                    flags = flags,
+                    bankIcon = bankIcon
                 ) {
                     navigateTo(navController, Screen.Transactions)
                 }
@@ -234,11 +248,6 @@ fun MainScreen(
             }
         }
     }
-}
-
-@Composable
-fun EmptyState() {
-    Text("No accounts found")
 }
 
 fun navigateTo(
@@ -306,10 +315,4 @@ fun MyFloatingActionButton(onClick: () -> Unit, contentDescription: String) {
     ) {
         Icon(Icons.Default.Add, contentDescription)
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun EmptyStatePreview() {
-    EmptyState()
 }

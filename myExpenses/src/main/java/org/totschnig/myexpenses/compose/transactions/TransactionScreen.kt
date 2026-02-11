@@ -84,6 +84,7 @@ import org.totschnig.myexpenses.compose.ColoredAmountText
 import org.totschnig.myexpenses.compose.OverFlowMenu
 import org.totschnig.myexpenses.compose.TEST_TAG_PAGER
 import org.totschnig.myexpenses.compose.TooltipIconButton
+import org.totschnig.myexpenses.compose.accounts.AccountIndicator
 import org.totschnig.myexpenses.compose.accounts.AccountSummaryV2
 import org.totschnig.myexpenses.compose.main.AppEvent
 import org.totschnig.myexpenses.compose.main.AppEventHandler
@@ -106,11 +107,12 @@ fun TransactionScreen(
     availableFilters: List<AccountGroupingKey>,
     selectedAccountId: Long,
     viewModel: MyExpensesV2ViewModel,
-    bottomBar: @Composable (() -> Unit),
+    bottomBar: @Composable () -> Unit,
     onEvent: AppEventHandler,
-    onPrepareContextMenuItem: (itemId: Int) -> Boolean,
-    onPrepareMenuItem: (itemId: Int) -> Boolean,
-    pageContent: @Composable ((pageAccount: PageAccount, accountCount: Int) -> Unit),
+    onPrepareContextMenuItem: (Int) -> Boolean,
+    onPrepareMenuItem: (Int) -> Boolean,
+    bankIcon: (@Composable (Modifier, Long) -> Unit)? = null,
+    pageContent: @Composable (PageAccount) -> Unit
 ) {
     LaunchedEffect(Unit) {
         viewModel.setLastVisited(StartScreen.Transactions)
@@ -132,9 +134,13 @@ fun TransactionScreen(
         }
     }
 
-    val currentAccount = remember(accountList) {
+    val currentAccount by remember(accountList) {
         derivedStateOf {
-            accountList[pagerState.settledPage.coerceIn(0, accountList.lastIndex)]
+            if (accountList.size > 1) {
+                accountList[pagerState.settledPage.coerceIn(0, accountList.lastIndex)]
+            } else {
+                accountList.first()
+            }
         }
     }
 
@@ -148,11 +154,12 @@ fun TransactionScreen(
                     navigationIcon = navigationIcon,
                     title = {
                         BalanceHeader(
-                            currentAccount = currentAccount.value,
+                            currentAccount = currentAccount,
                             displayBalanceType = selectedBalanceType,
                             onDisplayBalanceTypeChange = { newType ->
                                 selectedBalanceType = newType
-                            }
+                            },
+                            bankIcon = bankIcon
                         )
                     },
                     actions = {
@@ -162,7 +169,7 @@ fun TransactionScreen(
                             imageVector = Icons.Default.Search
                         ) { onEvent(AppEvent.Search) }
                         ViewOptionsMenu(
-                            currentAccount = currentAccount.value,
+                            currentAccount = currentAccount,
                             onEvent = onEvent
                         )
                         ActionMenu(
@@ -191,7 +198,7 @@ fun TransactionScreen(
                             ColoredAmountText(
                                 prefix = "${viewModel.selectionState.value.size}  (Σ: ",
                                 amount = viewModel.selectedTransactionSum,
-                                currency = currentAccount.value.currencyUnit,
+                                currency = currentAccount.currencyUnit,
                                 postfix = ")",
                                 colorFix = false
                             )
@@ -216,22 +223,24 @@ fun TransactionScreen(
         bottomBar = bottomBar
     ) { paddingValues ->
 
-        LaunchedEffect(selectedAccountId) {
-            val currentPage =
-                accountList.indexOfFirst { it.id == selectedAccountId }
-            if (currentPage > -1 && pagerState.currentPage != currentPage) {
-                pagerState.scrollToPage(currentPage)
+        if (accountList.size > 1) {
+            LaunchedEffect(selectedAccountId) {
+                val currentPage =
+                    accountList.indexOfFirst { it.id == selectedAccountId }
+                if (currentPage > -1 && pagerState.currentPage != currentPage) {
+                    pagerState.scrollToPage(currentPage)
+                }
             }
-        }
 
-        LaunchedEffect(pagerState.settledPage) {
-            val selected = accountList[pagerState.settledPage].id
-            viewModel.selectAccount(selected)
-            viewModel.scrollToAccountIfNeeded(
-                pagerState.currentPage,
-                selected,
-                true
-            )
+            LaunchedEffect(pagerState.settledPage) {
+                val selected = accountList[pagerState.settledPage].id
+                viewModel.selectAccount(selected)
+                viewModel.scrollToAccountIfNeeded(
+                    pagerState.currentPage,
+                    selected,
+                    true
+                )
+            }
         }
 
         Box(
@@ -239,68 +248,69 @@ fun TransactionScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .nestedScroll(tabRowState.nestedScrollConnection)
-            ) {
+            if (accountList.size > 1) {
                 Column(
                     modifier = Modifier
-                        .height(with(LocalDensity.current) { tabRowState.heightPx.toDp() })
-                        .clipToBounds()
+                        .fillMaxSize()
+                        .nestedScroll(tabRowState.nestedScrollConnection)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (accountGrouping != AccountGrouping.NONE && availableFilters.size > 1) {
-                            AccountFilterMenu(
-                                activeFilter = activeFilter,
-                                availableFilters = availableFilters,
-                                onFilterChange = viewModel::setFilter,
-                            )
-                        }
-                        val selectedTabIndex =
-                            pagerState.currentPage.coerceAtMost(accountList.lastIndex)
-                        SecondaryScrollableTabRow(
-                            selectedTabIndex = selectedTabIndex,
-                            edgePadding = 0.dp
-                        ) {
-                            accountList.forEachIndexed { index, account ->
-                                Tab(
-                                    selected = selectedTabIndex == index,
-                                    onClick = {
-                                        coroutineScope.launch {
-                                            pagerState.animateScrollToPage(index)
-                                        }
-                                    },
-                                    text = {
-                                        Text(
-                                            account.labelV2(LocalContext.current),
-                                            maxLines = 1
-                                        )
-                                    }
+                    Column(
+                        modifier = Modifier
+                            .height(with(LocalDensity.current) { tabRowState.heightPx.toDp() })
+                            .clipToBounds()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (accountGrouping != AccountGrouping.NONE && availableFilters.size > 1) {
+                                AccountFilterMenu(
+                                    activeFilter = activeFilter,
+                                    availableFilters = availableFilters,
+                                    onFilterChange = viewModel::setFilter,
                                 )
+                            }
+                            val selectedTabIndex =
+                                pagerState.currentPage.coerceAtMost(accountList.lastIndex)
+                            SecondaryScrollableTabRow(
+                                selectedTabIndex = selectedTabIndex,
+                                edgePadding = 0.dp
+                            ) {
+                                accountList.forEachIndexed { index, account ->
+                                    Tab(
+                                        selected = selectedTabIndex == index,
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                pagerState.animateScrollToPage(index)
+                                            }
+                                        },
+                                        text = {
+                                            Text(
+                                                account.labelV2(LocalContext.current),
+                                                maxLines = 1
+                                            )
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
+                    HorizontalPager(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.onSurface)
+                            .testTag(TEST_TAG_PAGER)
+                            .semantics {
+                                collectionInfo = CollectionInfo(1, accounts.size)
+                            },
+                        state = pagerState,
+                        pageSpacing = 10.dp,
+                        key = { pageIndex ->
+                            accountList.getOrNull(pageIndex)?.id ?: pageIndex                        },
+                        verticalAlignment = Alignment.Top,
+                    ) { page ->
+                        TransactionListPage(accountList[page], pageContent)
+                    }
                 }
-                HorizontalPager(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.onSurface)
-                        .testTag(TEST_TAG_PAGER)
-                        .semantics {
-                            collectionInfo = CollectionInfo(1, accounts.size)
-                        },
-                    state = pagerState,
-                    pageSpacing = 10.dp,
-                    key = { pageIndex ->
-                        accountList.getOrNull(pageIndex)?.id ?: pageIndex                    },
-                    verticalAlignment = Alignment.Top,
-                ) { page ->
-                    val account = accountList[page]
-                    val context = LocalContext.current
-                    val pageAccount = remember(account) { account.toPageAccount(context = context) }
-                    pageContent(pageAccount, accounts.size)
-                }
+            } else {
+                TransactionListPage(accountList.first(), pageContent)
             }
 
             val scope = rememberCoroutineScope()
@@ -327,6 +337,16 @@ fun TransactionScreen(
     }
 }
 
+@Composable
+private fun TransactionListPage(
+    account: BaseAccount,
+    pageContent: @Composable (PageAccount) -> Unit
+) {
+    val context = LocalContext.current
+    val pageAccount = remember(account) { account.toPageAccount(context = context) }
+    pageContent(pageAccount)
+}
+
 enum class BalanceType(
     @param:StringRes val resourceId: Int,
     val icon: ImageVector,
@@ -342,6 +362,7 @@ private fun BalanceHeader(
     currentAccount: BaseAccount,
     displayBalanceType: BalanceType,
     modifier: Modifier = Modifier,
+    bankIcon: (@Composable (Modifier, Long) -> Unit)? = null,
     onDisplayBalanceTypeChange: (BalanceType) -> Unit,
 ) {
     var isSummaryPopupVisible by rememberSaveable { mutableStateOf(false) }
@@ -365,37 +386,42 @@ private fun BalanceHeader(
             },
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = currentAccount.labelV2(LocalContext.current),
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val iconTint = when (validatedBalanceType) {
-                        BalanceType.CLEARED -> colorResource(id = R.color.CLEARED)
-                        BalanceType.RECONCILED -> colorResource(id = R.color.RECONCILED)
-                        else -> colorResource(id = R.color.UNRECONCILED)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                (currentAccount as? FullAccount)?.let {
+                    AccountIndicator(12.dp, currentAccount, bankIcon)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = currentAccount.labelV2(LocalContext.current),
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val iconTint = when (validatedBalanceType) {
+                            BalanceType.CLEARED -> colorResource(id = R.color.CLEARED)
+                            BalanceType.RECONCILED -> colorResource(id = R.color.RECONCILED)
+                            else -> colorResource(id = R.color.UNRECONCILED)
+                        }
+
+                        Icon(
+                            imageVector = validatedBalanceType.icon,
+                            contentDescription = stringResource(validatedBalanceType.resourceId),
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .size(18.dp),
+                            tint = iconTint
+                        )
+
+                        AmountText(
+                            getBalanceForType(
+                                currentAccount,
+                                validatedBalanceType
+                            ), currentAccount.currencyUnit,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
                     }
-
-                    Icon(
-                        imageVector = validatedBalanceType.icon,
-                        contentDescription = stringResource(validatedBalanceType.resourceId),
-                        modifier = Modifier
-                            .padding(end = 8.dp)
-                            .size(18.dp),
-                        tint = iconTint
-                    )
-
-                    AmountText(
-                        getBalanceForType(
-                            currentAccount,
-                            validatedBalanceType
-                        ), currentAccount.currencyUnit,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp
-                    )
                 }
             }
             Icon(

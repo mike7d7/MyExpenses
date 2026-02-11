@@ -5,7 +5,10 @@ import android.database.Cursor
 import org.totschnig.myexpenses.R
 import org.totschnig.myexpenses.db2.Repository
 import org.totschnig.myexpenses.db2.createAccount
+import org.totschnig.myexpenses.model.AccountFlag
+import org.totschnig.myexpenses.model.AccountGrouping
 import org.totschnig.myexpenses.model.AccountType
+import org.totschnig.myexpenses.model.CurrencyContext
 import org.totschnig.myexpenses.model.Grouping
 import org.totschnig.myexpenses.model.sort.SortDirection
 import org.totschnig.myexpenses.provider.DataBaseAccount
@@ -33,7 +36,6 @@ import org.totschnig.myexpenses.provider.KEY_ROWID
 import org.totschnig.myexpenses.provider.KEY_SEALED
 import org.totschnig.myexpenses.provider.KEY_SORT_BY
 import org.totschnig.myexpenses.provider.KEY_SORT_DIRECTION
-import org.totschnig.myexpenses.provider.KEY_SORT_KEY
 import org.totschnig.myexpenses.provider.KEY_SUPPORTS_RECONCILIATION
 import org.totschnig.myexpenses.provider.KEY_SYNC_ACCOUNT_NAME
 import org.totschnig.myexpenses.provider.KEY_TYPE
@@ -48,6 +50,7 @@ import org.totschnig.myexpenses.provider.getLong
 import org.totschnig.myexpenses.provider.getLongIfExists
 import org.totschnig.myexpenses.provider.getString
 import org.totschnig.myexpenses.provider.getStringOrNull
+import org.totschnig.myexpenses.viewmodel.data.DistributionAccountInfo
 import java.io.Serializable
 
 data class Account(
@@ -57,7 +60,8 @@ data class Account(
     val openingBalance: Long = 0L,
     override val currency: String,
     val type: AccountType,
-    val color: Int = DEFAULT_COLOR,
+    val flag: AccountFlag = AccountFlag.DEFAULT,
+    override val color: Int = DEFAULT_COLOR,
     val criterion: Long? = null,
     val syncAccountName: String? = null,
     val excludeFromTotals: Boolean = false,
@@ -71,13 +75,27 @@ data class Account(
     val exchangeRate: Double = 1.0,
     override val grouping: Grouping = Grouping.NONE,
     val bankId: Long? = null,
-    val dynamicExchangeRates: Boolean = false
-) : DataBaseAccount(), Serializable {
+    val dynamicExchangeRates: Boolean = false,
+    override val accountGrouping: AccountGrouping<*>? =  null
+) : DataBaseAccount(), Serializable, DistributionAccountInfo {
+
+    override val flagId = flag.id
+
+    override val typeId = type.id
 
     fun createIn(repository: Repository) = repository.createAccount(this)
 
-    fun getLabelForScreenTitle(context: Context) =
-        if (isHomeAggregate) context.getString(R.string.grand_total) else label
+    override fun label(context: Context, currencyContext: CurrencyContext) =
+        when {
+            isHomeAggregate -> context.getString(R.string.grand_total)
+            else -> when(accountGrouping) {
+                AccountGrouping.CURRENCY -> currencyContext[currency].title(context)
+                AccountGrouping.FLAG -> flag.title(context)
+                AccountGrouping.NONE -> context.getString(R.string.grand_total)
+                AccountGrouping.TYPE -> type.title(context)
+                null -> label
+            }
+        }
 
     @Suppress("DeprecatedCallableAddReplaceWith")
     @Deprecated("Helper for legacy Java code")
@@ -101,7 +119,12 @@ data class Account(
             KEY_IS_ASSET,
             KEY_SUPPORTS_RECONCILIATION,
             KEY_TYPE,
-            KEY_SORT_KEY,
+            KEY_TYPE_SORT_KEY,
+            KEY_FLAG,
+            KEY_FLAG_LABEL,
+            KEY_VISIBLE,
+            KEY_FLAG_SORT_KEY,
+            KEY_FLAG_ICON,
             KEY_EXCLUDE_FROM_TOTALS,
             KEY_SYNC_ACCOUNT_NAME,
             KEY_UUID,
@@ -131,7 +154,7 @@ data class Account(
             "0 AS $KEY_IS_AGGREGATE"
         )
 
-        fun fromCursor(cursor: Cursor, accountType: AccountType): Account {
+        fun fromCursor(cursor: Cursor): Account {
             val sortBy = cursor.getString(KEY_SORT_BY)
                 .takeIf { it == KEY_DATE || it == KEY_AMOUNT }
                 ?: KEY_DATE
@@ -141,7 +164,8 @@ data class Account(
                 description = cursor.getString(KEY_DESCRIPTION),
                 openingBalance = cursor.getLong(KEY_OPENING_BALANCE),
                 currency = cursor.getString(KEY_CURRENCY),
-                type = accountType,
+                type = AccountType.fromAccountCursor(cursor),
+                flag = AccountFlag.fromAccountCursor(cursor),
                 color = cursor.getInt(KEY_COLOR),
                 criterion = cursor.getLong(KEY_CRITERION),
                 syncAccountName = cursor.getStringOrNull(KEY_SYNC_ACCOUNT_NAME),

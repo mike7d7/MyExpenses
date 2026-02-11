@@ -1,6 +1,5 @@
 package org.totschnig.myexpenses.activity
 
-import android.content.ComponentName
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.Configuration
@@ -11,7 +10,6 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver.OnGlobalLayoutListener
-import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.ActionBarDrawerToggle
@@ -21,8 +19,6 @@ import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.widget.PopupMenu
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
@@ -31,30 +27,23 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.dimensionResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CollectionInfo
 import androidx.compose.ui.semantics.collectionInfo
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.Insets
 import androidx.core.graphics.drawable.DrawableCompat
-import androidx.core.net.toUri
 import androidx.core.os.BundleCompat
 import androidx.core.view.GravityCompat
 import androidx.core.view.ViewCompat
@@ -79,11 +68,11 @@ import org.totschnig.myexpenses.R
 import org.totschnig.myexpenses.compose.AppTheme
 import org.totschnig.myexpenses.compose.TEST_TAG_PAGER
 import org.totschnig.myexpenses.compose.accounts.AccountList
+import org.totschnig.myexpenses.compose.accounts.EmptyState
 import org.totschnig.myexpenses.contract.TransactionsContract.Transactions
 import org.totschnig.myexpenses.contract.TransactionsContract.Transactions.TYPE_SPLIT
 import org.totschnig.myexpenses.contract.TransactionsContract.Transactions.TYPE_TRANSFER
 import org.totschnig.myexpenses.databinding.ActivityMainBinding
-import org.totschnig.myexpenses.dialog.BalanceDialogFragment
 import org.totschnig.myexpenses.dialog.ConfirmationDialogFragment
 import org.totschnig.myexpenses.dialog.ConfirmationDialogFragment.Companion.KEY_COMMAND_NEGATIVE
 import org.totschnig.myexpenses.dialog.ConfirmationDialogFragment.Companion.KEY_COMMAND_POSITIVE
@@ -94,30 +83,17 @@ import org.totschnig.myexpenses.dialog.CriterionReachedDialogFragment
 import org.totschnig.myexpenses.dialog.HelpDialogFragment
 import org.totschnig.myexpenses.dialog.MessageDialogFragment
 import org.totschnig.myexpenses.dialog.TransactionListComposeDialogFragment
-import org.totschnig.myexpenses.dialog.progress.NewProgressDialogFragment
 import org.totschnig.myexpenses.feature.Feature
 import org.totschnig.myexpenses.injector
 import org.totschnig.myexpenses.model.AccountGrouping
 import org.totschnig.myexpenses.model.ContribFeature
 import org.totschnig.myexpenses.model.Money
 import org.totschnig.myexpenses.preference.PrefKey
-import org.totschnig.myexpenses.provider.DataBaseAccount.Companion.isAggregate
-import org.totschnig.myexpenses.provider.KEY_ACCOUNTID
 import org.totschnig.myexpenses.provider.KEY_AMOUNT
-import org.totschnig.myexpenses.provider.KEY_CLEARED_TOTAL
-import org.totschnig.myexpenses.provider.KEY_COLOR
-import org.totschnig.myexpenses.provider.KEY_CURRENCY
 import org.totschnig.myexpenses.provider.KEY_DATE
-import org.totschnig.myexpenses.provider.KEY_LABEL
-import org.totschnig.myexpenses.provider.KEY_RECONCILED_TOTAL
-import org.totschnig.myexpenses.provider.KEY_ROWID
-import org.totschnig.myexpenses.provider.TransactionDatabase.SQLiteDowngradeFailedException
-import org.totschnig.myexpenses.provider.TransactionDatabase.SQLiteUpgradeFailedException
-import org.totschnig.myexpenses.provider.TransactionProvider.TRANSACTIONS_URI
 import org.totschnig.myexpenses.retrofit.Vote
 import org.totschnig.myexpenses.ui.DiscoveryHelper
 import org.totschnig.myexpenses.ui.IDiscoveryHelper
-import org.totschnig.myexpenses.ui.SnackbarAction
 import org.totschnig.myexpenses.util.TextUtils
 import org.totschnig.myexpenses.util.Utils
 import org.totschnig.myexpenses.util.ads.AdHandler
@@ -133,11 +109,8 @@ import org.totschnig.myexpenses.util.setEnabledAndVisible
 import org.totschnig.myexpenses.util.ui.DisplayProgress
 import org.totschnig.myexpenses.util.ui.displayProgress
 import org.totschnig.myexpenses.util.ui.getAmountColor
-import org.totschnig.myexpenses.viewmodel.CompletedAction
 import org.totschnig.myexpenses.viewmodel.MyExpensesViewModel
-import org.totschnig.myexpenses.viewmodel.OpenAction
 import org.totschnig.myexpenses.viewmodel.RoadmapViewModel
-import org.totschnig.myexpenses.viewmodel.ShareAction
 import org.totschnig.myexpenses.viewmodel.SumInfo
 import org.totschnig.myexpenses.viewmodel.TransactionListViewModel
 import org.totschnig.myexpenses.viewmodel.UpgradeHandlerViewModel
@@ -147,14 +120,14 @@ import timber.log.Timber
 import java.io.Serializable
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.util.Optional
 import javax.inject.Inject
 import kotlin.math.sign
 
 const val DIALOG_TAG_OCR_DISAMBIGUATE = "DISAMBIGUATE"
 const val DIALOG_TAG_NEW_BALANCE = "NEW_BALANCE"
 
-open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultListener, ContribIFace,
-    NewProgressDialogFragment.Host {
+open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultListener, ContribIFace {
 
     private lateinit var adHandler: AdHandler
 
@@ -163,12 +136,12 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
     private val accountData: List<FullAccount>
         get() = viewModel.accountData.value?.getOrNull() ?: emptyList()
 
-    private val accountForNewTransaction: FullAccount?
-        get() = currentAccount?.let { current ->
+    override suspend fun accountForNewTransaction() = currentAccount?.let { current ->
             current.takeIf { !it.isAggregate } ?: viewModel.accountData.value?.getOrNull()
                 ?.filter { !it.isAggregate && (current.isHomeAggregate || it.currency == current.currency) }
                 ?.maxByOrNull { it.lastUsed }
-        }
+        }?.let { Optional.of(it) } ?:
+            if (getHiddenAccountCount() > 0) Optional.empty() else null
 
     override val currentAccount: FullAccount?
         get() = accountData.find { it.id == selectedAccountId }
@@ -520,16 +493,7 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                             flags = viewModel.accountFlags.collectAsState(emptyList()).value
                         )
                     }?.onFailure {
-                        val (message, forceQuit) = when (it) {
-                            is SQLiteDowngradeFailedException -> "Database cannot be downgraded from a newer version. Please either uninstall MyExpenses, before reinstalling, or upgrade to a new version." to true
-                            is SQLiteUpgradeFailedException -> "Database upgrade failed. Please contact ${
-                                getString(
-                                    R.string.support_email
-                                )
-                            } !" to true
-
-                            else -> "Data loading failed" to false
-                        }
+                        val (message, forceQuit) = it.processDataLoadingFailure()
                         showMessage(
                             message,
                             if (!forceQuit) {
@@ -798,23 +762,19 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                         Page(account = accountData[it].toPageAccount, accountCount)
                     }
                 } else {
-                    Column(
-                        modifier = Modifier
-                            .wrapContentSize()
-                            .padding(dimensionResource(id = R.dimen.padding_main_screen)),
-                        verticalArrangement = Arrangement.spacedBy(5.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            modifier = Modifier.wrapContentSize(),
-                            textAlign = TextAlign.Center,
-                            text = stringResource(id = R.string.no_accounts)
-                        )
-                        Button(onClick = { createAccountDo() }) {
-                            Text(text = stringResource(id = R.string.menu_create_account))
-                        }
-                    }
+                    EmptyState(::createAccountDo)
                 }
+            }
+        }
+    }
+
+
+    override fun createAccountWithCheck() {
+        lifecycleScope.launch {
+            if (accountCount + getHiddenAccountCount() < ContribFeature.FREE_ACCOUNTS) {
+                createAccountDo()
+            } else {
+                showContribDialog(ContribFeature.ACCOUNTS_UNLIMITED, null)
             }
         }
     }
@@ -831,27 +791,6 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
             activateOcrMode()
         }
     }
-
-    override suspend fun getEditIntent(): Intent? {
-        val candidate = accountForNewTransaction
-        return if (candidate != null || getHiddenAccountCount() > 0) {
-            super.getEditIntent()!!.apply {
-                candidate?.let {
-                    putExtra(KEY_ACCOUNTID, it.id)
-                    putExtra(KEY_CURRENCY, it.currency)
-                    putExtra(KEY_COLOR, it.color)
-                }
-                val accountId = selectedAccountId
-                if (isAggregate(accountId)) {
-                    putExtra(ExpenseEdit.KEY_AUTOFILL_MAY_SET_ACCOUNT, true)
-                }
-            }
-        } else {
-            showSnackBar(R.string.no_accounts)
-            null
-        }
-    }
-
 
     override fun startEdit(intent: Intent) {
         floatingActionButton.hide()
@@ -890,9 +829,9 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
         } else false
 
 
-    private fun createAccountDo() {
+    override fun createAccountDo() {
         closeDrawer()
-        createAccount.launch(Unit)
+        super.createAccountDo()
     }
 
     private fun configureEquivalentWorthMenuItemIcon(menuItem: MenuItem, checked: Boolean) {
@@ -928,87 +867,10 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
             }
 
             R.id.CREATE_ACCOUNT_COMMAND -> {
-                if (licenceHandler.hasAccessTo(ContribFeature.ACCOUNTS_UNLIMITED)) {
-                    createAccountDo()
-                } else {
-                    lifecycleScope.launch {
-                        if (accountCount + getHiddenAccountCount() < ContribFeature.FREE_ACCOUNTS) {
-                            createAccountDo()
-                        } else {
-                            showContribDialog(ContribFeature.ACCOUNTS_UNLIMITED, null)
-                        }
-                    }
-                }
+                createAccount()
             }
 
-            R.id.SAFE_MODE_COMMAND -> {
-                prefHandler.putBoolean(PrefKey.DB_SAFE_MODE, true)
-                viewModel.triggerAccountListRefresh()
-                contentResolver.notifyChange(TRANSACTIONS_URI, null, false)
-            }
-
-            R.id.OCR_DOWNLOAD_COMMAND -> {
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    data = "market://details?id=org.totschnig.ocr.tesseract".toUri()
-                }
-                packageManager.queryIntentActivities(intent, 0)
-                    .map { it.activityInfo }
-                    .find {
-                        it.packageName == "org.fdroid.fdroid" || it.packageName == "org.fdroid.basic"
-                    }?.let {
-                        intent.component = ComponentName(it.applicationInfo.packageName, it.name)
-                        startActivity(intent)
-                    }
-                    ?: run {
-                        Toast.makeText(this, "F-Droid not installed", Toast.LENGTH_LONG).show()
-                    }
-            }
-
-            R.id.BALANCE_COMMAND -> {
-                with(currentAccount!!) {
-                    if (hasCleared) {
-                        BalanceDialogFragment.newInstance(Bundle().apply {
-
-                            putLong(KEY_ROWID, id)
-                            putString(KEY_LABEL, label)
-                            putString(
-                                KEY_RECONCILED_TOTAL,
-                                currencyFormatter.formatMoney(
-                                    Money(currencyUnit, reconciledTotal)
-                                )
-                            )
-                            putString(
-                                KEY_CLEARED_TOTAL,
-                                currencyFormatter.formatMoney(
-                                    Money(currencyUnit, clearedTotal)
-                                )
-                            )
-                        }).show(supportFragmentManager, "BALANCE_ACCOUNT")
-                    } else {
-                        showSnackBar(R.string.dialog_command_disabled_balance)
-                    }
-                }
-            }
-
-            R.id.SYNC_COMMAND -> currentAccount?.takeIf { it.syncAccountName != null }?.let {
-                requestSync(
-                    accountName = it.syncAccountName!!,
-                    uuid = if (prefHandler.getBoolean(
-                            PrefKey.SYNC_NOW_ALL,
-                            false
-                        )
-                    ) null else it.uuid
-                )
-            }
-
-            R.id.FINTS_SYNC_COMMAND -> currentAccount?.takeIf { it.bankId != null }?.let {
-                contribFeatureRequested(
-                    ContribFeature.BANKING,
-                    Triple(it.bankId, it.id, it.type.id)
-                )
-            }
-
-            R.id.TOGGLE_SEALED_COMMAND -> toggleAccountSealed()
+            R.id.TOGGLE_SEALED_COMMAND -> currentAccount?.let { toggleAccountSealed(it) }
 
             R.id.EXCLUDE_FROM_TOTALS_COMMAND -> currentAccount?.let { toggleExcludeFromTotals(it) }
 
@@ -1056,8 +918,8 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
         return true
     }
 
-    private fun toggleAccountSealed(account: FullAccount? = currentAccount) {
-        account?.let { toggleAccountSealed(it, binding.accountPanel.root) }
+    private fun toggleAccountSealed(account: FullAccount) {
+        toggleAccountSealed(account, binding.accountPanel.root)
     }
 
     fun openBalanceSheet() {
@@ -1339,16 +1201,9 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
 
     override fun onFabClicked() {
         super.onFabClicked()
-        when {
-            currentAccount?.sealed == true -> showSnackBar(
-                message = getString(R.string.account_closed),
-                snackBarAction = SnackbarAction(getString(R.string.menu_reopen)) {
-                    dispatchCommand(R.id.TOGGLE_SEALED_COMMAND, null)
-                }
-            )
-
-            isScanMode() -> contribFeatureRequested(ContribFeature.OCR, true)
-            else -> createRowDo(Transactions.TYPE_TRANSACTION, false)
+        if (preCreateRowCheckForSealed()) {
+            if (isScanMode()) contribFeatureRequested(ContribFeature.OCR, true)
+            else createRowDo(Transactions.TYPE_TRANSACTION, false)
         }
     }
 
@@ -1395,6 +1250,7 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
         binding.toolbar.progressPercent.isVisible = accountVisual == ACCOUNT_VISUAL_PROGRESS
         binding.toolbar.accountColorIndicator.isVisible = accountVisual == ACCOUNT_VISUAL_COLOR
         binding.toolbar.bankIcon.isVisible = accountVisual == ACCOUNT_VISUAL_ICON
+
         when (accountVisual) {
             ACCOUNT_VISUAL_ICON -> {
                 viewModel.banks.value.find { it.id == account.bankId }?.let {
@@ -1527,21 +1383,6 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
         get() {
             return binding.accountPanel.expansionContent
         }
-
-    override fun onAction(action: CompletedAction, index: Int?) {
-        when (action) {
-            is ShareAction -> baseViewModel.share(
-                this,
-                action.targets,
-                "",
-                action.mimeType
-            )
-
-            is OpenAction -> startActionView(action.targets[index ?: 0], action.mimeType)
-
-            else -> {}
-        }
-    }
 
     override fun onNegative(args: Bundle) {
         val command = args.getInt(KEY_COMMAND_NEGATIVE)

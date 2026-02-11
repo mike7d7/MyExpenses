@@ -1,11 +1,16 @@
 package org.totschnig.myexpenses.activity
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -13,6 +18,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.totschnig.myexpenses.R
@@ -27,21 +35,20 @@ import org.totschnig.myexpenses.injector
 import org.totschnig.myexpenses.model.ContribFeature
 import org.totschnig.myexpenses.preference.PrefKey
 import org.totschnig.myexpenses.preference.enumValueOrDefault
-import org.totschnig.myexpenses.provider.DataBaseAccount.Companion.isAggregate
-import org.totschnig.myexpenses.provider.KEY_ACCOUNTID
-import org.totschnig.myexpenses.provider.KEY_COLOR
-import org.totschnig.myexpenses.provider.KEY_CURRENCY
 import org.totschnig.myexpenses.viewmodel.MyExpensesV2ViewModel
 import org.totschnig.myexpenses.viewmodel.SumInfo
 import org.totschnig.myexpenses.viewmodel.data.BaseAccount
 import org.totschnig.myexpenses.viewmodel.data.FullAccount
+import java.util.Optional
 
 enum class StartScreen {
     LastVisited, Accounts, Transactions, BalanceSheet
 }
 
 /**
- * TBD: ReviewManager, AdManager, Tests, WebUI, Status Handle configuration, Upgrade Handling, New balance
+ * TBD: ReviewManager, AdManager, Tests, WebUI, Status Handle configuration, Upgrade Handling,
+ * New balance, Manage types and flags, Help, Reconciliation, Tell a friend,
+ * Copy balance to clipboard, Budget progress, Bank icon
  */
 class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>() {
 
@@ -68,11 +75,9 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>() {
             inject(viewModel)
         }
         val startScreen = viewModel.startScreen.let {
-            if (it == StartScreen.LastVisited) {
+            if (it == StartScreen.LastVisited)
                 prefHandler.enumValueOrDefault(PrefKey.UI_SCREEN_LAST_VISITED, StartScreen.Accounts)
-            } else {
-                it
-            }
+            else it
         }
 
         setContent {
@@ -81,6 +86,40 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>() {
                 val availableFilters =
                     viewModel.availableGroupFilters.collectAsStateWithLifecycle().value
                 when {
+                    result?.isFailure == true -> {
+                        val (message, forceQuit) = result.exceptionOrNull()!!
+                            .processDataLoadingFailure()
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(dimensionResource(R.dimen.padding_main_screen)),
+                            // These two lines replace the Box's contentAlignment and the Column's horizontalAlignment
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(message)
+                            // Applying spacing manually since we are using Arrangement.Center
+                            // which takes precedence over Arrangement.spacedBy
+                            Spacer(modifier = Modifier.height(4.dp))
+                            if (!forceQuit) {
+                                Button(onClick = {
+                                    dispatchCommand(
+                                        R.id.SAFE_MODE_COMMAND,
+                                        null
+                                    )
+                                }) {
+                                    Text(stringResource(R.string.safe_mode))
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                            }
+
+                            Button(onClick = { dispatchCommand(R.id.QUIT_COMMAND, null) }) {
+                                Text(stringResource(R.string.button_label_close))
+                            }
+                        }
+
+                    }
+
                     result == null || availableFilters == null -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -90,12 +129,9 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>() {
                         }
                     }
 
-                    result.isFailure -> {
-                        Text("Error: ${result.exceptionOrNull()}")
-                    }
-
                     else -> {
-                        val selectedAccountIdFromState = viewModel.selectedAccountId.collectAsState().value
+                        val selectedAccountIdFromState =
+                            viewModel.selectedAccountId.collectAsState().value
                         LaunchedEffect(
                             viewModel.accountList.collectAsState().value.isNotEmpty(),
                             selectedAccountIdFromState
@@ -109,29 +145,34 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>() {
                                 }
                             }
                         }
+                        val accounts = result.getOrThrow()
+                        val banks = viewModel.banks.collectAsState()
                         MainScreen(
                             viewModel,
                             startScreen,
-                            result.getOrThrow(),
+                            accounts,
                             availableFilters,
                             selectedAccountId = selectedAccountIdFromState,
                             onAppEvent = object : AppEventHandler {
                                 override fun invoke(event: AppEvent) {
                                     when (event) {
 
-                                        AppEvent.CreateAccount -> createAccount.launch(Unit)
-                                        is AppEvent.CreateTransaction -> when (event.action) {
-                                            Action.Scan -> contribFeatureRequested(
-                                                ContribFeature.OCR,
-                                                true
-                                            )
+                                        AppEvent.CreateAccount -> createAccount()
+                                        is AppEvent.CreateTransaction ->
+                                            if (preCreateRowCheckForSealed()) {
+                                                when (event.action) {
+                                                    Action.Scan -> contribFeatureRequested(
+                                                        ContribFeature.OCR,
+                                                        true
+                                                    )
 
-                                            else -> createRow(
-                                                event.action.type,
-                                                event.transferEnabled,
-                                                event.action == Action.Income
-                                            )
-                                        }
+                                                    else -> createRow(
+                                                        event.action.type,
+                                                        event.transferEnabled,
+                                                        event.action == Action.Income
+                                                    )
+                                                }
+                                            }
 
                                         is AppEvent.SetAccountGrouping -> viewModel.setGrouping(
                                             event.newGrouping
@@ -187,36 +228,25 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>() {
                             },
                             onPrepareContextMenuItem = ::isContextMenuItemVisible,
                             onPrepareMenuItem = { itemId -> currentAccount.isMenuItemVisible(itemId) },
-                            flags = viewModel.accountFlags.collectAsState(emptyList()).value
-                        ) { pageAccount, accountCount -> Page(pageAccount, accountCount, v2 = true) }
+                            flags = viewModel.accountFlags.collectAsState(emptyList()).value,
+                            bankIcon = { modifier, id ->
+                                banks.value.find { it.id == id }
+                                    ?.let { bank ->
+                                        bankingFeature.bankIconRenderer?.invoke(
+                                            modifier,
+                                            bank
+                                        )
+                                    }
+                            }
+                        ) { pageAccount -> Page(pageAccount, accounts.size, v2 = true) }
                     }
                 }
             }
         }
     }
 
-    private val accountForNewTransaction: FullAccount?
-        get() = currentAccount as? FullAccount ?: viewModel.accountDataV2.value?.getOrNull()
-            ?.maxByOrNull { it.lastUsed }
-
-
-    override suspend fun getEditIntent(): Intent? {
-        val candidate = accountForNewTransaction
-        return if (candidate != null) {
-            super.getEditIntent()!!.apply {
-                candidate.let {
-                    putExtra(KEY_ACCOUNTID, it.id)
-                    putExtra(KEY_CURRENCY, it.currency)
-                    putExtra(KEY_COLOR, it.color)
-                }
-                val accountId = selectedAccountId
-                if (isAggregate(accountId)) {
-                    putExtra(ExpenseEdit.KEY_AUTOFILL_MAY_SET_ACCOUNT, true)
-                }
-            }
-        } else {
-            showSnackBar(R.string.no_accounts)
-            null
-        }
-    }
+    override suspend fun accountForNewTransaction() = Optional.ofNullable(
+        currentAccount as? FullAccount ?:
+        viewModel.accountDataV2.value?.getOrNull()?.maxByOrNull { it.lastUsed }
+    )
 }
