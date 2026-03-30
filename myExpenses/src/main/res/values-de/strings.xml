@@ -76,7 +76,7 @@
     <string name="dialog_remind_rate_yes">Jetzt bewerten</string>
     <string name="dialog_security_answer">Antwort</string>
     <string name="dialog_security_question">Frage</string>
-    <!-- %1$s is replace with account label -->
+    <!-- %1$s is replaced with account label -->
     <string name="dialog_title_balance_account">%1$s abstimmen</string>
     <string name="dialog_title_contrib_feature">Premium-Funktion</string>
     <plurals name="dialog_title_warning_delete_account">
@@ -1045,4 +1045,9 @@
     <string name="content_description_clear_party">Ausgewählte Partei entfernen</string>
     <string name="content_description_select_recent_file">Wählen Sie aus aktuellen Dateien aus</string>
     <string name="content_description_browse_device_files">Durchsuchen Sie Dateien auf diesem Gerät</string>
+    <string name="content_description_show_balance_details">Detaillierte Informationen anzeigen</string>
+    <string name="menu_templates">Vorlagen</string>
+    <string name="pref_ui_start_screen_title">Startbildschirm</string>
+    <string name="pref_ui_start_screen_last_visited">Zuletzt besucht</string>
+    <string name="main_navigation">Hauptnavigation</string>
 </resources>

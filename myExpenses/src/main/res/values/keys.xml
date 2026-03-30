@@ -261,7 +261,6 @@
     <string name="uuid">UUID</string>
     <string name="pref_db_safe_mode_key">db_safe_mode</string>
     <string name="safe_mode">Safe mode</string>
-    <string name="corrupted_data_detected">Corrupted data detected: You can inspect the corrupted records from Settings -> Debug -> Corrupted Data. Contact support@myexpenses.mobi for assistance.</string>
     <string name="pref_debug_repair_987_key">debug_repair_987</string>
     <string name="pref_csv_export_key">csv_export</string>
     <string name="pref_csv_export_split_categories_key">csv_export_split_categories</string>
@@ -282,6 +281,9 @@
     <string name="pref_export_manage_files_key">export_manage_files</string>
     <string name="pref_help_key">help</string>
     <string name="pref_customize_main_menu_key">customize_main_menu</string>
+    <string name="pref_customize_menu_v2_key">customize_menu_v2</string>
+    <string name="pref_customize_menu_v2_main_key">customize_menu_v2_main</string>
+    <string name="pref_customize_menu_v2_transactions_key">customize_menu_v2_transactions</string>
     <string name="pref_remove_local_calendar_key">remove_local_calendar</string>
     <string name="pref_print_header_left_key">print_header_left</string>
     <string name="pref_print_header_center_key">print_header_center</string>
@@ -301,7 +303,7 @@
     <string name="pref_equivalent_amounts_automatic_update_key">equivalent_amounts_automatic_update</string>
     <string name="pref_ui_home_screen_shortcuts_show_new_balance_key">ui_home_screen_shortcuts_show_new_balance</string>
     <string name="autofill">Autofill</string>
-    <string name="pref_ui_main_screen_version_key">ui_main_screen</string>
+    <string name="pref_ui_main_screen_version_key">ui_main_screen_legacy</string>
     <string name="pref_ui_start_screen_key">ui_start_screen</string>
-
+    <string name="pref_tell_a_friend_key">tell_a_friend</string>
 </resources>

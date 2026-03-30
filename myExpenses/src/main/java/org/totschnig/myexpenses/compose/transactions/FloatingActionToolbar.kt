@@ -20,6 +20,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,7 +35,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.totschnig.myexpenses.R
 import org.totschnig.myexpenses.compose.HierarchicalMenu
+import org.totschnig.myexpenses.compose.LocalColors
 import org.totschnig.myexpenses.compose.MenuEntry
+import org.totschnig.myexpenses.compose.calculateOnColor
 import org.totschnig.myexpenses.contract.TransactionsContract.Transactions
 
 enum class Action(
@@ -44,23 +47,54 @@ enum class Action(
 ) {
     Expense(Icons.Default.Remove, R.string.expense),
     Income(Icons.Default.Add, R.string.income),
-    Transfer(Icons.AutoMirrored.Default.ArrowForward, R.string.transfer, Transactions.TYPE_TRANSFER),
-    Split(Icons.AutoMirrored.Default.CallSplit, R.string.split_transaction, Transactions.TYPE_SPLIT),
+    Transfer(
+        Icons.AutoMirrored.Default.ArrowForward,
+        R.string.transfer,
+        Transactions.TYPE_TRANSFER
+    ),
+    Split(
+        Icons.AutoMirrored.Default.CallSplit,
+        R.string.split_transaction,
+        Transactions.TYPE_SPLIT
+    ),
     Scan(Icons.Default.Scanner, R.string.button_scan);
+
+
+    val tint: Color?
+        @Composable get() = when(this) {
+            Expense -> LocalColors.current.expense
+            Income -> LocalColors.current.income
+            Transfer -> LocalColors.current.transfer
+            else -> null
+        }
+
+
+    val contentDescription: String
+        @Composable get() = when(this) {
+            Expense, Income -> stringResource(R.string.menu_create_transaction) + " (" + stringResource(label) + ")"
+            Transfer -> stringResource(R.string.menu_create_transfer)
+            Split -> stringResource(R.string.menu_create_split)
+            Scan -> stringResource(label)
+        }
 }
 
 @Composable
 fun FloatingActionToolbar(
     modifier: Modifier = Modifier,
     lastAction: Action = Action.Expense,
-    onAction: (action: Action) -> Unit,
+    containerColor: Color,
+    onAction: (action: Action) -> Unit
 ) {
     val showMenu = remember { mutableStateOf(false) }
 
     Card(
         modifier = modifier,
         shape = CircleShape,
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = containerColor,
+            contentColor = containerColor.calculateOnColor()
+        )
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
@@ -68,13 +102,11 @@ fun FloatingActionToolbar(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             IconButton(
-                onClick = {
-                    onAction(lastAction)
-                },
+                onClick = { onAction(lastAction) },
             ) {
                 Icon(
                     lastAction.imageVector,
-                    contentDescription = stringResource(R.string.menu_create_transaction)
+                    contentDescription = lastAction.contentDescription,
                 )
             }
 
@@ -82,6 +114,7 @@ fun FloatingActionToolbar(
                 modifier = Modifier
                     .height(24.dp)
                     .width(1.dp),
+                color = LocalContentColor.current
             )
 
             Box {
@@ -102,12 +135,12 @@ fun FloatingActionToolbar(
                     expanded = showMenu,
                     menu = Action.entries.map {
                         MenuEntry(
-                            icon = it.imageVector,
-                            tint = Color.Unspecified,
                             label = it.label,
                             command = it.name,
-                            action = { onAction(it) }
-                        )
+                            contentDescription = it.contentDescription,
+                            icon = it.imageVector,
+                            tint = it.tint
+                        ) { onAction(it) }
                     }
                 )
             }

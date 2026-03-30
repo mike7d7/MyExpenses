@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -447,7 +448,7 @@ fun TransactionList(
                                     )
                                 }
                             }
-                            if (isLast) GroupDivider() else HorizontalDivider()
+                            HorizontalDivider()
                         }
                     }
 
@@ -553,71 +554,68 @@ fun HeaderRenderer(
     updateShowSumDetails: (Boolean) -> Unit = {},
 ) {
 
-    Box(
-        modifier = Modifier
-            .headerSemantics(headerId)
-            .optional(onHeaderSize) { onHeaderSize ->
-                onGloballyPositioned { layoutCoordinates ->
-                    onHeaderSize(layoutCoordinates.size.height)
-                }
-            }
-            .background(MaterialTheme.colorScheme.background)
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer
     ) {
-        GroupDivider()
-        val context = LocalContext.current
-        val displayTitle = account.grouping.getDisplayTitle(
-            context,
-            headerRow.year,
-            headerRow.second,
-            dateInfo,
-            headerRow.weekStart
-        )
-        toggle?.let {
-            ExpansionHandle(
-                modifier = Modifier.align(Alignment.TopEnd),
-                contentDescription = displayTitle,
-                isExpanded = isExpanded,
-                toggle = toggle
+        Box(
+            modifier = Modifier
+                .headerSemantics(headerId)
+                .optional(onHeaderSize) { onHeaderSize ->
+                    onGloballyPositioned { layoutCoordinates ->
+                        onHeaderSize(layoutCoordinates.size.height)
+                    }
+                }
+        ) {
+            val context = LocalContext.current
+            val displayTitle = account.grouping.getDisplayTitle(
+                context,
+                headerRow.year,
+                headerRow.second,
+                dateInfo,
+                headerRow.weekStart
             )
-        }
-        if (budget?.second != null && budget.second != 0L) {
-            val progress = (-headerRow.expenseSum.amountMinor * 100F / budget.second)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                DonutInABox(
-                    modifier = Modifier
-                        .padding(horizontal = mainScreenPadding)
-                        .clickable { onBudgetClick(budget.first, headerId) }
-                        .size(42.dp),
-                    progress = progress,
-                    fontSize = 12.sp,
-                    color = Color(account.color),
-                    excessColor = LocalColors.current.expense
+            toggle?.let {
+                ExpansionHandle(
+                    modifier = Modifier.align(Alignment.TopEnd),
+                    contentDescription = displayTitle,
+                    isExpanded = isExpanded,
+                    toggle = toggle
                 )
+            }
+            if (budget?.second != null && budget.second != 0L) {
+                val progress = (-headerRow.expenseSum.amountMinor * 100F / budget.second)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    DonutInABox(
+                        modifier = Modifier
+                            .padding(horizontal = mainScreenPadding)
+                            .clickable { onBudgetClick(budget.first, headerId) }
+                            .size(42.dp),
+                        progress = progress,
+                        fontSize = 12.sp,
+                        color = Color(account.color),
+                        excessColor = LocalColors.current.expense
+                    )
 
+                    HeaderData(
+                        displayTitle,
+                        headerRow,
+                        showSumDetails,
+                        showOnlyDelta,
+                        updateShowSumDetails,
+                        alignStart = true
+                    )
+                }
+            } else {
                 HeaderData(
                     displayTitle,
                     headerRow,
                     showSumDetails,
                     showOnlyDelta,
-                    updateShowSumDetails,
-                    alignStart = true
+                    updateShowSumDetails
                 )
             }
-        } else {
-            HeaderData(
-                displayTitle,
-                headerRow,
-                showSumDetails,
-                showOnlyDelta,
-                updateShowSumDetails
-            )
         }
     }
-}
-
-@Composable
-fun GroupDivider(modifier: Modifier = Modifier) {
-    HorizontalDivider(modifier = modifier, color = colorResource(id = R.color.emphasis))
 }
 
 val mainScreenPadding
@@ -646,8 +644,8 @@ private fun transactionMenu(
     add(
         MenuEntry(
             label = R.string.details,
-            icon = Icons.Filled.Loupe,
-            command = "DETAILS"
+            command = "DETAILS",
+            icon = Icons.Filled.Loupe
         ) {
             onEvent(TransactionEvent.ShowDetails, transaction)
         })
@@ -656,8 +654,8 @@ private fun transactionMenu(
             add(
                 MenuEntry(
                     label = R.string.menu_unpack,
-                    icon = Icons.Filled.Unarchive,
-                    command = "UNPACK_ARCHIVE"
+                    command = "UNPACK_ARCHIVE",
+                    icon = Icons.Filled.Unarchive
                 ) {
                     onEvent(TransactionEvent.UnArchive, transaction)
                 })
@@ -668,23 +666,23 @@ private fun transactionMenu(
             add(
                 MenuEntry(
                     label = R.string.menu_clone_transaction,
-                    icon = Icons.Filled.ContentCopy,
-                    command = "CLONE"
+                    command = "CLONE",
+                    icon = Icons.Filled.ContentCopy
                 ) {
                     onEvent(TransactionEvent.Clone, transaction)
                 })
             add(
                 MenuEntry(
                     label = R.string.menu_create_template_from_transaction,
-                    icon = IcActionTemplateAdd,
-                    command = "CREATE_TEMPLATE_FROM_TRANSACTION"
+                    command = "CREATE_TEMPLATE_FROM_TRANSACTION",
+                    icon = IcActionTemplateAdd
                 ) { onEvent(TransactionEvent.CreateTemplate, transaction) })
             if (transaction.crStatus == CrStatus.VOID) {
                 add(
                     MenuEntry(
                         label = R.string.menu_undelete_transaction,
-                        icon = Icons.Filled.RestoreFromTrash,
-                        command = "UNDELETE_TRANSACTION"
+                        command = "UNDELETE_TRANSACTION",
+                        icon = Icons.Filled.RestoreFromTrash
                     ) {
                         onEvent(TransactionEvent.UnDelete, transaction)
                     })
@@ -704,8 +702,8 @@ private fun transactionMenu(
                     add(
                         MenuEntry(
                             label = R.string.menu_ungroup_split_transaction,
-                            icon = Icons.AutoMirrored.Filled.CallSplit,
-                            command = "UNGROUP_SPLIT"
+                            command = "UNGROUP_SPLIT",
+                            icon = Icons.AutoMirrored.Filled.CallSplit
                         ) {
                             onEvent(TransactionEvent.Ungroup, transaction)
                         })
@@ -715,8 +713,8 @@ private fun transactionMenu(
                     add(
                         MenuEntry(
                             label = R.string.menu_unlink_transfer,
-                            icon = Icons.Filled.LinkOff,
-                            command = "UNLINK_TRANSFER"
+                            command = "UNLINK_TRANSFER",
+                            icon = Icons.Filled.LinkOff
                         ) {
                             onEvent(TransactionEvent.Unlink, transaction)
                         })
@@ -727,8 +725,8 @@ private fun transactionMenu(
                         add(
                             MenuEntry(
                                 label = R.string.menu_transform_to_transfer,
-                                icon = Icons.Filled.Link,
-                                command = "TRANSFORM_TRANSFER"
+                                command = "TRANSFORM_TRANSFER",
+                                icon = Icons.Filled.Link
                             ) {
                                 onEvent(TransactionEvent.TransformToTransfer, transaction)
                             })
@@ -740,7 +738,6 @@ private fun transactionMenu(
     add(
         SubMenuEntry(
             label = R.string.filter,
-            icon = Icons.Filled.Search,
             subMenu = buildList {
                 if (transaction.catId != null && !transaction.isSplit) {
                     if (transaction.categoryPath != null) {
@@ -823,7 +820,8 @@ private fun transactionMenu(
                         }
                     )
                 }
-            }
+            },
+            icon = Icons.Filled.Search
         )
     )
 }

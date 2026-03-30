@@ -1,7 +1,6 @@
 package org.totschnig.myexpenses.activity
 
 import android.content.Intent
-import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -44,7 +43,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.Insets
 import androidx.core.graphics.drawable.DrawableCompat
-import androidx.core.os.BundleCompat
 import androidx.core.view.GravityCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -56,10 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.navigation.NavigationView
-import com.google.android.material.snackbar.Snackbar
 import eltos.simpledialogfragment.SimpleDialog.OnDialogResultListener
-import eltos.simpledialogfragment.form.AmountInput
-import eltos.simpledialogfragment.form.AmountInputHostDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -89,10 +84,8 @@ import org.totschnig.myexpenses.model.AccountGrouping
 import org.totschnig.myexpenses.model.ContribFeature
 import org.totschnig.myexpenses.model.Money
 import org.totschnig.myexpenses.preference.PrefKey
-import org.totschnig.myexpenses.provider.KEY_AMOUNT
 import org.totschnig.myexpenses.provider.KEY_DATE
 import org.totschnig.myexpenses.retrofit.Vote
-import org.totschnig.myexpenses.ui.DiscoveryHelper
 import org.totschnig.myexpenses.ui.IDiscoveryHelper
 import org.totschnig.myexpenses.util.TextUtils
 import org.totschnig.myexpenses.util.Utils
@@ -113,19 +106,16 @@ import org.totschnig.myexpenses.viewmodel.MyExpensesViewModel
 import org.totschnig.myexpenses.viewmodel.RoadmapViewModel
 import org.totschnig.myexpenses.viewmodel.SumInfo
 import org.totschnig.myexpenses.viewmodel.TransactionListViewModel
-import org.totschnig.myexpenses.viewmodel.UpgradeHandlerViewModel
 import org.totschnig.myexpenses.viewmodel.data.FullAccount
 import org.totschnig.myexpenses.viewmodel.repository.RoadmapRepository
 import timber.log.Timber
 import java.io.Serializable
-import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.Optional
 import javax.inject.Inject
 import kotlin.math.sign
 
 const val DIALOG_TAG_OCR_DISAMBIGUATE = "DISAMBIGUATE"
-const val DIALOG_TAG_NEW_BALANCE = "NEW_BALANCE"
 
 open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultListener, ContribIFace {
 
@@ -260,7 +250,7 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                     this,
                     it,
                     3,
-                    DiscoveryHelper.Feature.FabLongPress
+                    IDiscoveryHelper.Feature.FabLongPress
                 )
             }
         }
@@ -279,26 +269,6 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
         return (drawerToggle?.onOptionsItemSelected(item) == true) || when (item.itemId) {
             R.id.SCAN_MODE_COMMAND -> {
                 toggleScanMode()
-                true
-            }
-
-            R.id.SHOW_STATUS_HANDLE_COMMAND -> {
-                currentAccount?.let {
-                    lifecycleScope.launch {
-                        viewModel.showStatusHandle.set(!item.isChecked)
-                        invalidateOptionsMenu()
-                    }
-                }
-                true
-            }
-
-            R.id.WEB_UI_COMMAND -> {
-                toggleWebUI()
-                true
-            }
-
-            R.id.SEARCH_COMMAND -> {
-                showFilterDialog = true
                 true
             }
 
@@ -334,21 +304,6 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
         }
     }
 
-    private fun toggleWebUI() {
-        if (prefHandler.getBoolean(PrefKey.UI_WEB, false)) {
-            prefHandler.putBoolean(PrefKey.UI_WEB, false)
-        } else {
-            contribFeatureRequested(ContribFeature.WEB_UI, false)
-        }
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
-        super.onSharedPreferenceChanged(sharedPreferences, key)
-        if (key != null && prefHandler.matches(key, PrefKey.UI_WEB)) {
-            invalidateOptionsMenu()
-        }
-    }
-
     private lateinit var onBackPressedCallback: OnBackPressedCallback
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -365,53 +320,10 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
         toolbar.isVisible = false
 
         binding.viewPagerMain.viewPager.setContent {
-            val upgradeInfo = upgradeHandlerViewModel.upgradeInfo.collectAsState().value
-            if (upgradeInfo == null || upgradeInfo is UpgradeHandlerViewModel.UpgradeSuccess) {
-                MainContent()
-            }
+            MainContent()
         }
 
         setupToolbarClickHandlers()
-
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                upgradeHandlerViewModel.upgradeInfo.collect { info ->
-                    when (info) {
-                        is UpgradeHandlerViewModel.UpgradeError -> {
-                            showMessage(
-                                info.info,
-                                null,
-                                null,
-                                MessageDialogFragment.Button(
-                                    R.string.button_label_close,
-                                    R.id.QUIT_COMMAND,
-                                    null
-                                ),
-                                false
-                            )
-                        }
-
-                        is UpgradeHandlerViewModel.UpgradeSuccess -> {
-                            showDismissibleSnackBar(
-                                message = info.info,
-                                actionLabel = getString(R.string.dialog_dismiss) +
-                                        if (info.count > 1) " (${info.index} / ${info.count})" else "",
-                                callback = object : Snackbar.Callback() {
-                                    override fun onDismissed(
-                                        transientBottomBar: Snackbar,
-                                        event: Int,
-                                    ) {
-                                        if (event == DISMISS_EVENT_SWIPE || event == DISMISS_EVENT_ACTION)
-                                            upgradeHandlerViewModel.messageShown()
-                                    }
-                                })
-                        }
-
-                        else -> {}
-                    }
-                }
-            }
-        }
 
         if (resources.getDimensionPixelSize(R.dimen.drawerWidth) > resources.displayMetrics.widthPixels) {
             binding.accountPanel.root.layoutParams.width = resources.displayMetrics.widthPixels
@@ -445,10 +357,13 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                             .takeIf { it != AccountGrouping.FLAG }
                             ?: AccountGrouping.DEFAULT
 
+                        val selectedAccountIdFromState =
+                            viewModel.selectedAccountId.collectAsState().value
+
                         AccountList(
                             accountData = data,
                             grouping = accountGrouping,
-                            selectedAccount = selectedAccountId,
+                            selectedAccount = selectedAccountIdFromState,
                             onSelected = {
                                 selectedAccountId = it
                                 closeDrawer()
@@ -495,21 +410,20 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                     }?.onFailure {
                         val (message, forceQuit) = it.processDataLoadingFailure()
                         showMessage(
-                            message,
-                            if (!forceQuit) {
+                            message = message,
+                            positive = if (!forceQuit) {
                                 MessageDialogFragment.Button(
                                     R.string.safe_mode,
                                     R.id.SAFE_MODE_COMMAND,
                                     null
                                 )
                             } else null,
-                            null,
-                            MessageDialogFragment.Button(
+                            negative = MessageDialogFragment.Button(
                                 R.string.button_label_close,
                                 R.id.QUIT_COMMAND,
                                 null
                             ),
-                            false
+                            cancellable = false
                         )
                     }
                 }
@@ -750,8 +664,8 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                         state = pagerState,
                         pageSpacing = 10.dp,
                         key = { accountData[it].id }
-                    ) {
-                        Timber.i("Rendering page $it")
+                    ) { pageIndex ->
+                        val isCurrentPage = pagerState.currentPage == pageIndex
                         LaunchedEffect(selectionState.size) {
                             if (selectionState.isNotEmpty()) {
                                 startMyActionMode()
@@ -759,7 +673,7 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                                 finishActionMode()
                             }
                         }
-                        Page(account = accountData[it].toPageAccount, accountCount)
+                        Page(account = accountData[pageIndex].toPageAccount, accountCount, isCurrentPage)
                     }
                 } else {
                     EmptyState(::createAccountDo)
@@ -797,38 +711,6 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
         super.startEdit(intent)
     }
 
-    override fun onResult(dialogTag: String, which: Int, extras: Bundle): Boolean =
-        if (super.onResult(dialogTag, which, extras)) true
-        else if (which == BUTTON_POSITIVE) {
-            when (dialogTag) {
-
-                DIALOG_TAG_NEW_BALANCE -> {
-                    lifecycleScope.launch {
-                        createRowIntent(Transactions.TYPE_TRANSACTION, false)?.apply {
-                            putExtra(
-                                KEY_AMOUNT,
-                                (BundleCompat.getSerializable(
-                                    extras,
-                                    KEY_AMOUNT,
-                                    BigDecimal::class.java
-                                ))!! -
-                                        Money(
-                                            currentAccount!!.currencyUnit,
-                                            currentAccount!!.currentBalance
-                                        ).amountMajor
-                            )
-                        }?.let {
-                            startEdit(it)
-                        }
-                    }
-                    true
-                }
-
-                else -> false
-            }
-        } else false
-
-
     override fun createAccountDo() {
         closeDrawer()
         super.createAccountDo()
@@ -858,17 +740,10 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
         if (super.dispatchCommand(command, tag)) {
             return true
         } else when (command) {
-            R.id.MANAGE_ACCOUNT_TYPES_COMMAND -> {
-                startActivity(Intent(this, ManageAccountTypes::class.java))
-            }
 
-            R.id.ACCOUNT_FLAGS_COMMAND -> {
-                startActivity(Intent(this, ManageAccountFlags::class.java))
-            }
+            R.id.COPY_TO_CLIPBOARD_COMMAND -> copyToClipBoard()
 
-            R.id.CREATE_ACCOUNT_COMMAND -> {
-                createAccount()
-            }
+            R.id.CREATE_ACCOUNT_COMMAND -> createAccount()
 
             R.id.TOGGLE_SEALED_COMMAND -> currentAccount?.let { toggleAccountSealed(it) }
 
@@ -880,34 +755,9 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                 putExtra(HelpDialogFragment.KEY_CONTEXT, "NavigationDrawer")
             })
 
-            R.id.SHARE_COMMAND -> startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                putExtra(
-                    Intent.EXTRA_TEXT,
-                    Utils.getTellAFriendMessage(this@MyExpenses).toString()
-                )
-                type = "text/plain"
-            }, getResources().getText(R.string.menu_share)))
-
             R.id.CANCEL_CALLBACK_COMMAND -> finishActionMode()
 
             R.id.ROADMAP_COMMAND -> startActivity(Intent(this, RoadmapVoteActivity::class.java))
-
-            R.id.BACKUP_COMMAND -> startActivity(
-                Intent(
-                    this,
-                    BackupRestoreActivity::class.java
-                ).apply {
-                    action = BackupRestoreActivity.ACTION_BACKUP
-                })
-
-
-            R.id.RESTORE_COMMAND -> startActivity(
-                Intent(
-                    this,
-                    BackupRestoreActivity::class.java
-                ).apply {
-                    action = BackupRestoreActivity.ACTION_RESTORE
-                })
 
             R.id.BALANCE_SHEET_COMMAND -> {
                 openBalanceSheet()
@@ -996,7 +846,7 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
 
     fun setupFabSubMenu() {
         floatingActionButton.setOnLongClickListener { fab ->
-            discoveryHelper.markDiscovered(DiscoveryHelper.Feature.FabLongPress)
+            discoveryHelper.markDiscovered(IDiscoveryHelper.Feature.FabLongPress)
             val popup = PopupMenu(this, fab)
             val popupMenu = popup.menu
             popup.setOnMenuItemClickListener { item ->
@@ -1037,7 +887,7 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        prefHandler.mainMenu.forEach { menuItem ->
+        prefHandler.getCustomMenu().forEach { menuItem ->
             if (menuItem.subMenu != null) {
                 val subMenu =
                     menu.addSubMenu(Menu.NONE, menuItem.id, Menu.NONE, menuItem.getLabel(this))
@@ -1056,10 +906,6 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        menu.findItem(R.id.WEB_UI_COMMAND)?.let {
-            it.isChecked = isWebUiActive()
-            checkMenuIcon(it, R.drawable.ic_computer)
-        }
         if (accountData.isNotEmpty() && currentAccount != null) {
             menu.findItem(R.id.SCAN_MODE_COMMAND)?.let {
                 it.isChecked = isScanMode()
@@ -1073,12 +919,12 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                     R.id.PRINT_COMMAND,
                     R.id.SYNC_COMMAND,
                     R.id.FINTS_SYNC_COMMAND,
-                    R.id.ARCHIVE_COMMAND
+                    R.id.ARCHIVE_COMMAND,
+                    R.id.SEARCH_COMMAND
                 ).forEach {
                     menu.findItem(it)?.setEnabledAndVisible(isMenuItemVisible(it))
                 }
 
-                val reconciliationAvailable = type.supportsReconciliation && !sealed
                 val groupingMenu = menu.findItem(R.id.GROUPING_COMMAND)
                 val groupingEnabled = sortBy == KEY_DATE
                 groupingMenu?.setEnabledAndVisible(groupingEnabled)
@@ -1094,10 +940,9 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                 }
 
                 menu.findItem(R.id.SHOW_STATUS_HANDLE_COMMAND)?.apply {
-                    setEnabledAndVisible(reconciliationAvailable)
                     if (reconciliationAvailable) {
                         lifecycleScope.launch {
-                            isChecked = viewModel.showStatusHandle.flow.first()
+                            isChecked = viewModel.showStatusHandle.get()
                             checkMenuIcon(this@apply, R.drawable.ic_square)
                         }
                     }
@@ -1108,7 +953,6 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                 }
             }
             menu.findItem(R.id.SEARCH_COMMAND)?.let {
-                it.setEnabledAndVisible(hasItems)
                 it.isChecked = currentFilter.whereFilter.value != null
                 checkMenuIcon(it, R.drawable.ic_menu_search)
             }
@@ -1156,19 +1000,7 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                         )
                     }
                     popup.setOnMenuItemClickListener { item ->
-                        when (item.itemId) {
-                            R.id.COPY_TO_CLIPBOARD_COMMAND -> copyToClipBoard()
-                            R.id.NEW_BALANCE_COMMAND -> if (selectedAccountId > 0) {
-                                AmountInputHostDialog.build().title(R.string.new_balance)
-                                    .fields(
-                                        AmountInput.plain(KEY_AMOUNT)
-                                            .label(R.string.new_balance)
-                                            .fractionDigits(currentAccount!!.currencyUnit.fractionDigits)
-                                            .withTypeSwitch(currentAccount!!.currentBalance > 0)
-                                    ).show(this, DIALOG_TAG_NEW_BALANCE)
-                            }
-                        }
-                        true
+                        dispatchCommand(item.itemId, null)
                     }
                     popup.show()
                 }
@@ -1360,7 +1192,6 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
     }
 
     fun isScanMode() = prefHandler.getBoolean(PrefKey.OCR, false)
-    private fun isWebUiActive() = prefHandler.getBoolean(PrefKey.UI_WEB, false)
 
     private fun activateOcrMode() {
         prefHandler.putBoolean(PrefKey.OCR, true)
@@ -1435,18 +1266,9 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
         }
     }
 
-    override fun onActivityResult(
-        requestCode: Int, resultCode: Int,
-        intent: Intent?,
-    ) {
-        super.onActivityResult(requestCode, resultCode, intent)
-        if (requestCode == EDIT_REQUEST) {
-            floatingActionButton.show()
-            if (resultCode == RESULT_OK) {
-                if (!adHandler.onEditTransactionResult()) {
-                    reviewManager.onEditTransactionResult(this)
-                }
-            }
+    override fun onEditTransactionResult() {
+        if (!adHandler.onEditTransactionResult()) {
+            reviewManager.onEditTransactionResult(this)
         }
     }
 

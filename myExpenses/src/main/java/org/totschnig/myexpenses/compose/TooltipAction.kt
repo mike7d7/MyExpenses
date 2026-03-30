@@ -1,7 +1,9 @@
 package org.totschnig.myexpenses.compose
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.PlainTooltip
@@ -14,18 +16,40 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import org.apache.commons.lang3.exception.ExceptionUtils.isChecked
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TooltipIconButton(
     tooltip: String,
     imageVector: ImageVector,
-    onClick: () -> Unit
+    isChecked: Boolean = false,
+    onClick: () -> Unit,
+) {
+    TooltipIconButton(
+        tooltip, rememberVectorPainter(imageVector), isChecked, onClick
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TooltipIconButton(
+    tooltip: String,
+    painter: Painter,
+    isChecked: Boolean = false,
+    onClick: () -> Unit,
 ) {
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below, 4.dp),
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(
+            TooltipAnchorPosition.Below,
+            4.dp
+        ),
         tooltip = {
             PlainTooltip {
                 Text(tooltip)
@@ -33,8 +57,14 @@ fun TooltipIconButton(
         },
         state = rememberTooltipState()
     ) {
-        IconButton(onClick = onClick) {
-            Icon(imageVector, tooltip)
+        if (isChecked) {
+            FilledTonalIconButton(onClick = onClick) {
+                Icon(painter, tooltip)
+            }
+        } else {
+            IconButton(onClick = onClick) {
+                Icon(painter, tooltip)
+            }
         }
     }
 }
@@ -44,7 +74,7 @@ fun TooltipIconMenu(
     modifier: Modifier = Modifier,
     tooltip: String,
     imageVector: ImageVector,
-    menu: Menu
+    menu: Menu,
 ) {
     Box(modifier) {
         val showMenu = remember { mutableStateOf(false) }

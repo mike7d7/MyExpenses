@@ -23,18 +23,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.core.net.toUri
+import androidx.core.os.BundleCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.google.android.material.snackbar.Snackbar
+import eltos.simpledialogfragment.form.AmountInput
+import eltos.simpledialogfragment.form.AmountInputHostDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.totschnig.myexpenses.R
 import org.totschnig.myexpenses.activity.MyExpenses.Companion.MANAGE_HIDDEN_FRAGMENT_TAG
+import org.totschnig.myexpenses.compose.conditional
 import org.totschnig.myexpenses.compose.filter.FilterCard
 import org.totschnig.myexpenses.compose.filter.FilterDialog
 import org.totschnig.myexpenses.compose.filter.FilterHandler
@@ -80,6 +84,7 @@ import org.totschnig.myexpenses.preference.PrefKey
 import org.totschnig.myexpenses.provider.CheckSealedHandler
 import org.totschnig.myexpenses.provider.DataBaseAccount.Companion.isAggregate
 import org.totschnig.myexpenses.provider.KEY_ACCOUNTID
+import org.totschnig.myexpenses.provider.KEY_AMOUNT
 import org.totschnig.myexpenses.provider.KEY_CLEARED_TOTAL
 import org.totschnig.myexpenses.provider.KEY_COLOR
 import org.totschnig.myexpenses.provider.KEY_CURRENCY
@@ -135,10 +140,13 @@ import org.totschnig.myexpenses.viewmodel.data.PageAccount
 import org.totschnig.myexpenses.viewmodel.data.Transaction2
 import timber.log.Timber
 import java.io.Serializable
+import java.math.BigDecimal
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.Optional
 import kotlin.jvm.optionals.getOrNull
+
+const val DIALOG_TAG_NEW_BALANCE = "NEW_BALANCE"
 
 typealias RenderFactory = (
     renderType: RenderType,
@@ -400,10 +408,73 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
             .show(supportFragmentManager, "DELETE_ACCOUNT")
     }
 
+    private fun toggleWebUI(enabled: Boolean) {
+        if (enabled) {
+            contribFeatureRequested(ContribFeature.WEB_UI, false)
+        } else {
+            baseViewModel.toggleWebUi(false)
+        }
+    }
+
     override fun dispatchCommand(command: Int, tag: Any?): Boolean {
         if (super.dispatchCommand(command, tag)) {
             return true
         } else when (command) {
+
+            R.id.WEB_UI_COMMAND -> {
+                toggleWebUI(tag as Boolean)
+            }
+
+            R.id.BACKUP_COMMAND -> startActivity(
+                Intent(
+                    this,
+                    BackupRestoreActivity::class.java
+                ).apply {
+                    action = BackupRestoreActivity.ACTION_BACKUP
+                })
+
+
+            R.id.RESTORE_COMMAND -> startActivity(
+                Intent(
+                    this,
+                    BackupRestoreActivity::class.java
+                ).apply {
+                    action = BackupRestoreActivity.ACTION_RESTORE
+                })
+
+            R.id.SHOW_STATUS_HANDLE_COMMAND -> {
+                currentAccount?.let {
+                    lifecycleScope.launch {
+                        viewModel.showStatusHandle.set(tag as Boolean)
+                        invalidateOptionsMenu()
+                    }
+                }
+            }
+
+            R.id.SEARCH_COMMAND -> showFilterDialog = true
+
+            R.id.NEW_BALANCE_COMMAND -> {
+                if (selectedAccountId > 0) {
+                    (currentAccount as? FullAccount)?.let {
+                        AmountInputHostDialog.build().title(R.string.new_balance)
+                            .fields(
+                                AmountInput.plain(KEY_AMOUNT)
+                                    .label(R.string.new_balance)
+                                    .fractionDigits(it.currencyUnit.fractionDigits)
+                                    .withTypeSwitch(it.currentBalance > 0)
+                            ).show(this, DIALOG_TAG_NEW_BALANCE)
+                    }
+                }
+            }
+
+            R.id.MANAGE_ACCOUNT_TYPES_COMMAND -> {
+                startActivity(Intent(this, ManageAccountTypes::class.java))
+            }
+
+            R.id.ACCOUNT_FLAGS_COMMAND -> {
+                startActivity(Intent(this, ManageAccountFlags::class.java))
+            }
+
             R.id.BALANCE_COMMAND -> {
                 (currentAccount as? FullAccount)?.let {
                     if (it.hasCleared) {
@@ -773,24 +844,15 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
     private fun Intent.forwardCurrentConfiguration(currentAccount: BaseAccount) {
         if (currentAccount is AggregateAccount) {
             putExtra(KEY_ACCOUNT_GROUPING, currentAccount.accountGrouping.name)
-            when (currentAccount.accountGrouping) {
-                AccountGrouping.CURRENCY -> putExtra(
-                    KEY_ACCOUNT_GROUPING_GROUP,
-                    currentAccount.currency
-                )
-
-                AccountGrouping.FLAG -> putExtra(
-                    KEY_ACCOUNT_GROUPING_GROUP,
-                    currentAccount.flag!!.id.toString()
-                )
-
-                AccountGrouping.TYPE -> putExtra(
-                    KEY_ACCOUNT_GROUPING_GROUP,
-                    currentAccount.type!!.id.toString()
-                )
-
-                else -> {}
-            }
+            putExtra(
+                KEY_ACCOUNT_GROUPING_GROUP,
+                when (currentAccount.accountGrouping) {
+                    AccountGrouping.CURRENCY -> currentAccount.currency
+                    AccountGrouping.FLAG -> currentAccount.flag!!.id.toString()
+                    AccountGrouping.TYPE -> currentAccount.type!!.id.toString()
+                    else -> "Unit"
+                }
+            )
         } else {
             putExtra(KEY_ACCOUNTID, currentAccount.id)
         }
@@ -801,86 +863,88 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
     }
 
     override fun contribFeatureCalled(feature: ContribFeature, tag: Serializable?) {
-        currentAccount?.also { currentAccount ->
-            when (feature) {
-                ContribFeature.DISTRIBUTION -> {
+        when (feature) {
+            ContribFeature.DISTRIBUTION -> {
+                currentAccount?.let {
                     recordUsage(feature)
                     startActivity(Intent(this, DistributionActivity::class.java).apply {
-                        forwardCurrentConfiguration(currentAccount)
+                        forwardCurrentConfiguration(it)
                     })
                 }
+            }
 
-                ContribFeature.HISTORY -> {
+            ContribFeature.HISTORY -> {
+                currentAccount?.let {
                     recordUsage(feature)
                     startActivity(Intent(this, HistoryActivity::class.java).apply {
-                        forwardCurrentConfiguration(currentAccount)
+                        forwardCurrentConfiguration(it)
                     })
                 }
+            }
 
-                ContribFeature.SPLIT_TRANSACTION -> {
-                    if (tag != null) {
-                        showConfirmationDialog(
-                            tag = "SPLIT_TRANSACTION",
-                            message = getString(R.string.warning_split_transactions),
-                            commandPositive = R.id.SPLIT_TRANSACTION_COMMAND,
-                            commandPositiveLabel = R.string.menu_split_transaction
-                        ) {
-                            putLongArray(KEY_ROW_IDS, tag as LongArray?)
-                        }
-                    } else {
-                        createRowDo(TYPE_SPLIT, false)
+            ContribFeature.SPLIT_TRANSACTION -> {
+                if (tag != null) {
+                    showConfirmationDialog(
+                        tag = "SPLIT_TRANSACTION",
+                        message = getString(R.string.warning_split_transactions),
+                        commandPositive = R.id.SPLIT_TRANSACTION_COMMAND,
+                        commandPositiveLabel = R.string.menu_split_transaction
+                    ) {
+                        putLongArray(KEY_ROW_IDS, tag as LongArray?)
                     }
+                } else {
+                    createRowDo(TYPE_SPLIT, false)
                 }
+            }
 
-                ContribFeature.PRINT -> {
+            ContribFeature.PRINT -> {
+                currentAccount?.let {
                     showProgressSnackBar(
                         getString(R.string.progress_dialog_printing, "PDF")
                     )
                     if (tag == ExportViewModel.PRINT_TRANSACTION_LIST) {
                         viewModel.print(
-                            currentAccount.toPageAccount(this),
+                            it.toPageAccount(this),
                             currentFilter.whereFilter.value
                         )
                     } else if (tag == ExportViewModel.PRINT_BALANCE_SHEET) {
                         viewModel.printBalanceSheet()
                     }
                 }
-
-                ContribFeature.BUDGET -> {
-                    if (tag != null) {
-                        val (budgetId, headerId) = tag as Pair<Long, Int>
-                        startActivity(Intent(this, BudgetActivity::class.java).apply {
-                            putExtra(KEY_ROWID, budgetId)
-                            fillIntentForGroupingFromTag(headerId)
-                        })
-                    } else {
-                        recordUsage(feature)
-                        val i = Intent(this, ManageBudgets::class.java)
-                        startActivity(i)
-                    }
-                }
-
-                ContribFeature.BANKING -> {
-                    val (bankId, accountId, accountTypeId) = tag as Triple<Long, Long, Long>
-                    bankingFeature.startSyncFragment(
-                        bankId,
-                        accountId,
-                        accountTypeId,
-                        supportFragmentManager
-                    )
-                }
-
-                ContribFeature.OCR -> if (featureViewModel.isFeatureAvailable(this, Feature.OCR)) {
-                    //ocrViewModel.startOcrFeature(Uri.parse("file:///android_asset/OCR.jpg"), supportFragmentManager);
-                    startMediaChooserDo("SCAN")
-                } else {
-                    featureViewModel.requestFeature(this, Feature.OCR)
-                }
-
-                else -> super.contribFeatureCalled(feature, tag)
             }
-        } ?: run {
-            showSnackBar(R.string.no_accounts)
+
+            ContribFeature.BUDGET -> {
+                if (tag != null) {
+                    val (budgetId, headerId) = tag as Pair<Long, Int>
+                    startActivity(Intent(this, BudgetActivity::class.java).apply {
+                        putExtra(KEY_ROWID, budgetId)
+                        fillIntentForGroupingFromTag(headerId)
+                    })
+                } else {
+                    recordUsage(feature)
+                    val i = Intent(this, ManageBudgets::class.java)
+                    startActivity(i)
+                }
+            }
+
+            ContribFeature.BANKING -> {
+                val (bankId, accountId, accountTypeId) = tag as Triple<Long, Long, Long>
+                bankingFeature.startSyncFragment(
+                    bankId,
+                    accountId,
+                    accountTypeId,
+                    supportFragmentManager
+                )
+            }
+
+            ContribFeature.OCR -> if (featureViewModel.isFeatureAvailable(this, Feature.OCR)) {
+                //ocrViewModel.startOcrFeature(Uri.parse("file:///android_asset/OCR.jpg"), supportFragmentManager);
+                startMediaChooserDo("SCAN")
+            } else {
+                featureViewModel.requestFeature(this, Feature.OCR)
+            }
+
+            else -> super.contribFeatureCalled(feature, tag)
         }
     }
 
@@ -930,7 +994,7 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
                     if (transaction.transferPeerIsArchived == true) R.string.warning_archived_transfer_cannot_be_edited else R.string.warning_splitpartcategory_context
                 )
             } else {
-                startActivityForResult(
+                startEdit(
                     Intent(this, ExpenseEdit::class.java).apply {
                         putExtra(KEY_ROWID, transaction.id)
                         putExtra(KEY_COLOR, transaction.color ?: currentAccount?.color(resources))
@@ -938,7 +1002,7 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
                             putExtra(ExpenseEdit.KEY_CLONE, true)
                         }
 
-                    }, EDIT_REQUEST
+                    }
                 )
             }
         }
@@ -1067,6 +1131,8 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
             R.id.BALANCE_COMMAND -> isReal && type.supportsReconciliation && !sealed
             R.id.FINTS_SYNC_COMMAND -> (this as? FullAccount)?.bankId != null
             R.id.ARCHIVE_COMMAND -> isReal && !sealed && hasItems
+            R.id.SEARCH_COMMAND -> hasItems
+            R.id.SHOW_STATUS_HANDLE_COMMAND -> (this as? FullAccount)?.reconciliationAvailable == true
             else -> true
         }
     }
@@ -1306,11 +1372,17 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
         get() = sumInfo.value.hasItems
 
     @Composable
-    fun Page(account: PageAccount, accountCount: Int, v2: Boolean = false) {
+    fun Page(
+        account: PageAccount,
+        accountCount: Int,
+        isCurrentPage: Boolean,
+        v2: Boolean = false,
+    ) {
         val coroutineScope = rememberCoroutineScope()
         val preferredSearchType =
             viewModel.preferredSearchType.flow.collectAsState(TYPE_COMPLEX).value
-        if (showFilterDialog) {
+        if (showFilterDialog && isCurrentPage) {
+            Timber.d("showFilterDialog for page ${account.label}")
             FilterDialog(
                 account = account,
                 sumInfo = sumInfo.value,
@@ -1336,20 +1408,28 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
             if (account.sealed) finishActionMode()
         }
 
-        val showStatusHandle =
-            if (account.isAggregate || account.type?.supportsReconciliation == false)
-                false
-            else
-                viewModel.showStatusHandle.flow.collectAsState(initial = true).value
+        val showStatusHandleState = viewModel.showStatusHandle.flow.collectAsState(initial = false)
 
-        val onToggleCrStatus: ((Long) -> Unit)? = if (showStatusHandle) ::toggleCrStatus else null
+        val onToggleCrStatus = remember {
+            derivedStateOf {
+                if (if (account.isAggregate || account.type?.supportsReconciliation == false) {
+                        false
+                    } else {
+                        showStatusHandleState.value
+                    }
+                ) ::toggleCrStatus else null
+            }
+        }
+
 
         val headerData = remember(account) { viewModel.headerData(account, v2) }
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .conditional(!v2) {
+                    background(MaterialTheme.colorScheme.background)
+                }
         ) {
 
             val filter = viewModel.filterPersistence.getValue(account.id)
@@ -1421,7 +1501,7 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
                             account,
                             withCategoryIcon.value,
                             colorSource.value,
-                            onToggleCrStatus
+                            onToggleCrStatus.value
                         )
                     }
                 }
@@ -1611,4 +1691,37 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
             else -> {}
         }
     }
+
+    override fun onResult(dialogTag: String, which: Int, extras: Bundle): Boolean =
+        if (super.onResult(dialogTag, which, extras)) true
+        else if (which == BUTTON_POSITIVE) {
+            when (dialogTag) {
+
+                DIALOG_TAG_NEW_BALANCE -> {
+                    (currentAccount as? FullAccount)?.let {
+                        lifecycleScope.launch {
+                            createRowIntent(Transactions.TYPE_TRANSACTION, false)?.apply {
+                                putExtra(
+                                    KEY_AMOUNT,
+                                    (BundleCompat.getSerializable(
+                                        extras,
+                                        KEY_AMOUNT,
+                                        BigDecimal::class.java
+                                    ))!! -
+                                            Money(
+                                                it.currencyUnit,
+                                                it.currentBalance
+                                            ).amountMajor
+                                )
+                            }?.let {
+                                startEdit(it)
+                            }
+                        }
+                    }
+                    true
+                }
+
+                else -> false
+            }
+        } else false
 }

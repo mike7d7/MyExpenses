@@ -33,7 +33,6 @@ import org.totschnig.myexpenses.db2.preDefinedName
 import org.totschnig.myexpenses.db2.updatePlan
 import org.totschnig.myexpenses.dialog.MenuItem
 import org.totschnig.myexpenses.dialog.name
-import org.totschnig.myexpenses.fragment.preferences.PreferenceUiFragment.Companion.compactItemRendererTitle
 import org.totschnig.myexpenses.model.AccountGrouping
 import org.totschnig.myexpenses.model.CrStatus
 import org.totschnig.myexpenses.model.CurrencyEnum
@@ -76,7 +75,6 @@ import org.totschnig.myexpenses.provider.useAndMapToList
 import org.totschnig.myexpenses.service.BudgetWidgetUpdateWorker
 import org.totschnig.myexpenses.service.PlanExecutor
 import org.totschnig.myexpenses.sync.GenericAccountService
-import org.totschnig.myexpenses.ui.DiscoveryHelper
 import org.totschnig.myexpenses.ui.IDiscoveryHelper
 import org.totschnig.myexpenses.util.ICurrencyFormatter
 import org.totschnig.myexpenses.util.crashreporting.CrashHandler
@@ -106,28 +104,27 @@ class UpgradeHandlerViewModel(application: Application) :
     @Inject
     lateinit var currencyFormatter: ICurrencyFormatter
 
-    private var upgradeInfoShowIndex: Int = -1
-    private val upgradeInfoList: MutableList<String> = mutableListOf()
+    data class MigrationInfo(val id: Int)
 
-    sealed class UpgradeInfo
+    sealed class UpgradeState
 
-    data class UpgradeSuccess(val info: String, val index: Int, val count: Int): UpgradeInfo()
+    data class UpgradeSuccess(val migrationInfos: List<MigrationInfo>): UpgradeState()
 
-    data class UpgradeError(val info: String): UpgradeInfo()
+    data class UpgradeError(val info: String): UpgradeState()
 
-    data class UpgradePending(val fromVersion: Int, val toVersion: Int): UpgradeInfo()
+    object UpgradePending: UpgradeState()
 
-    private val _upgradeInfo: MutableStateFlow<UpgradeInfo?> = MutableStateFlow(null)
-    val upgradeInfo: StateFlow<UpgradeInfo?> = _upgradeInfo
+    private val _upgradeInfo: MutableStateFlow<UpgradeState> = MutableStateFlow(UpgradePending)
+    val upgradeInfo: StateFlow<UpgradeState> = _upgradeInfo
 
     fun upgrade(
         activity: BaseActivity,
         fromVersion: Int,
         toVersion: Int
     ) {
-        _upgradeInfo.update { UpgradePending(fromVersion, toVersion) }
 
         viewModelScope.launch(context = coroutineContext()) {
+            val migrationInfos = mutableListOf<MigrationInfo>()
             try {
                 if (fromVersion < 19) {
                     prefHandler.putString(
@@ -219,11 +216,11 @@ class UpgradeHandlerViewModel(application: Application) :
                     getApplication<MyApplication>().invalidateHomeCurrency()
                 }
 
-                if (fromVersion < 354 && GenericAccountService.getAccounts(getApplication())
+/*                if (fromVersion < 354 && GenericAccountService.getAccounts(getApplication())
                         .isNotEmpty()
                 ) {
                     upgradeInfoList.add(getString(R.string.upgrade_information_cloud_sync_storage_format))
-                }
+                }*/
 
                 if (fromVersion < 385) {
                     val hasIncomeColumn = "max(amount * (transfer_peer is null)) > 0 "
@@ -234,7 +231,7 @@ class UpgradeHandlerViewModel(application: Application) :
                     )?.use {
                         if (it.moveToFirst()) {
                             if (it.getInt(0) > 0) {
-                                discoveryHelper.markDiscovered(DiscoveryHelper.Feature.ExpenseIncomeSwitch)
+                                discoveryHelper.markDiscovered(IDiscoveryHelper.Feature.ExpenseIncomeSwitch)
                             }
                         }
                     }
@@ -331,7 +328,7 @@ class UpgradeHandlerViewModel(application: Application) :
                     contentResolver.call(DUAL_URI, METHOD_CHECK_CORRUPTED_DATA_987, null, null)
                         ?.getLongArray(KEY_RESULT)?.size?.let { corruptedCount ->
                             if (corruptedCount > 0) {
-                                upgradeInfoList.add(getString(R.string.corrupted_data_detected))
+                                //upgradeInfoList.add(getString(R.string.corrupted_data_detected))
                                 CrashHandler.report(Exception("Bug 987: $corruptedCount corrupted transactions detected"))
                             }
                         }
@@ -448,13 +445,13 @@ class UpgradeHandlerViewModel(application: Application) :
                         prefHandler.remove(PrefKey.GROUP_HEADER)
                     }
 
-                    upgradeInfoList.add(
+/*                    upgradeInfoList.add(
                         getString(
                             R.string.upgrade_info_557,
                             getString(R.string.pref_category_title_ui),
                             "${getString(R.string.help_MyExpenses_title)} -> ${localizedContext.compactItemRendererTitle()}"
                         )
-                    )
+                    )*/
                 }
 
                 if (fromVersion < 563) {
@@ -653,11 +650,15 @@ class UpgradeHandlerViewModel(application: Application) :
                         }
                     }
                 }
+                if (fromVersion < 838) {
+                    migrationInfos.add(
+                        MigrationInfo(1)
+                    )
+                }
+
                 prefHandler.putInt(PrefKey.CURRENT_VERSION, toVersion)
-                if (upgradeInfoList.isNotEmpty()) {
-                    postNextUpgradeInfo()
-                } else {
-                    _upgradeInfo.update { null }
+                _upgradeInfo.update {
+                    UpgradeSuccess(migrationInfos)
                 }
             } catch (e: Exception) {
                 CrashHandler.report(e)
@@ -687,21 +688,5 @@ class UpgradeHandlerViewModel(application: Application) :
                 CrashHandler.report(e)
             }
         }
-    }
-
-    private fun postNextUpgradeInfo() {
-        val index = upgradeInfoShowIndex + 1
-        upgradeInfoList.getOrNull(index).let { info ->
-            upgradeInfoShowIndex = if (info == null) -1 else index
-            _upgradeInfo.update {
-                info?.let {
-                    UpgradeSuccess(it, index + 1, upgradeInfoList.size)
-                }
-            }
-        }
-    }
-
-    fun messageShown() {
-        postNextUpgradeInfo()
     }
 }

@@ -357,8 +357,8 @@ class ManageCategories : ProtectedFragmentActivity(),
                                                         },
                                                         MenuEntry(
                                                             label = R.string.subcategory,
-                                                            icon = Icons.Filled.Add,
-                                                            command = "CREATE_SUBCATEGORY"
+                                                            command = "CREATE_SUBCATEGORY",
+                                                            icon = Icons.Filled.Add
                                                         ) {
                                                             if (cat.level > 1) {
                                                                 contribFeatureRequested(
@@ -371,8 +371,8 @@ class ManageCategories : ProtectedFragmentActivity(),
                                                         },
                                                         MenuEntry(
                                                             label = R.string.menu_move,
-                                                            icon = myiconpack.ArrowsAlt,
-                                                            command = "MOVE_CATEGORY"
+                                                            command = "MOVE_CATEGORY",
+                                                            icon = myiconpack.ArrowsAlt
                                                         ) { showMoveTargetDialog(cat) }
                                                     )
                                             }
@@ -429,7 +429,6 @@ class ManageCategories : ProtectedFragmentActivity(),
                     .filter { selected.contains(it.id) }
                     .joinToString(separator = ",") { it.label }
                 setResult(RESULT_FIRST_USER, Intent().apply {
-                    putExtra(KEY_ACCOUNTID, intent.getLongExtra(KEY_ACCOUNTID, 0))
                     putExtra(KEY_ROWID, selected.toLongArray())
                     putExtra(KEY_LABEL, label)
                 })

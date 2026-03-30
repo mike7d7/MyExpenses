@@ -25,11 +25,16 @@ import android.os.Build
 import android.os.Process
 import android.os.StrictMode
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -103,6 +108,9 @@ open class MyApplication : Application(), SharedPreferences.OnSharedPreferenceCh
     @Inject
     lateinit var plannerUtils: PlannerUtils
 
+    @Inject
+    lateinit var dataStore: DataStore<Preferences>
+
     private var lastPause: Long = 0
 
     var isLocked = false
@@ -173,13 +181,29 @@ open class MyApplication : Application(), SharedPreferences.OnSharedPreferenceCh
         }
     }
 
-    override fun onStart(owner: LifecycleOwner) {
-        if (prefHandler.getBoolean(PrefKey.UI_WEB, false)) {
-            if (initialLaunchWasForSystemPreferences) {
-                Timber.i("Suppressing WebUI start")
-            } else {
-                controlWebUi(START_ACTION)
-            }
+    override fun onCreate(owner: LifecycleOwner) {
+        // Instead of a one-time check, observe the Flow to handle changes reactively
+        MainScope().launch {
+            var isFirstEmission = true
+            dataStore.data
+                .map { preferences ->
+                    preferences[prefHandler.getBooleanPreferencesKey(PrefKey.UI_WEB)] ?: false
+                }
+                .distinctUntilChanged()
+                .collect { isWebUiEnabled ->
+                    if (isWebUiEnabled) {
+                        if (initialLaunchWasForSystemPreferences) {
+                            Timber.i("Suppressing WebUI start")
+                        } else {
+                            controlWebUi(START_ACTION)
+                        }
+                    } else {
+                        if (!isFirstEmission) {
+                            controlWebUi(STOP_ACTION)
+                        }
+                    }
+                    isFirstEmission = false
+                }
         }
     }
 
@@ -217,7 +241,8 @@ open class MyApplication : Application(), SharedPreferences.OnSharedPreferenceCh
 
     private fun setupLogging() {
         MainScope().launch(Dispatchers.IO) {
-            val debugLoggingEnabled = prefHandler.getBoolean(PrefKey.DEBUG_LOGGING, BuildConfig.DEBUG)
+            val debugLoggingEnabled =
+                prefHandler.getBoolean(PrefKey.DEBUG_LOGGING, BuildConfig.DEBUG)
             val crashReportEnabled = prefHandler.getBoolean(PrefKey.CRASHREPORT_ENABLED, true)
 
             loggingSetupMutex.withLock { // Critical section protected by the Mutex
@@ -291,7 +316,7 @@ open class MyApplication : Application(), SharedPreferences.OnSharedPreferenceCh
                 || ctx.intent.getBooleanExtra(
             EXTRA_START_FROM_WIDGET_DATA_ENTRY, false
         ))
-        Timber.i("reading last pause : %d", lastPause /1000000)
+        Timber.i("reading last pause : %d", lastPause / 1000000)
         val isPostDelay = System.nanoTime() - lastPause > prefHandler.getInt(
             PrefKey.PROTECTION_DELAY_SECONDS,
             15
@@ -315,22 +340,30 @@ open class MyApplication : Application(), SharedPreferences.OnSharedPreferenceCh
                 }
             if (componentName == null) {
                 report(Exception("Start of Web User Interface failed"))
-                //Since trying to start the WebUI failed, it is likeyl that the STOP_ACTION triggered by
+                //Since trying to start the WebUI failed, it is likely that the STOP_ACTION triggered by
                 //onSharedPreferenceChanged listener might also fail
                 try {
-                    prefHandler.putBoolean(PrefKey.UI_WEB, false)
+                    toggleWebUi(false)
                 } catch (e: Exception) {
                     report(e)
                 }
             }
         }.onFailure {
-            prefHandler.putBoolean(PrefKey.UI_WEB, false)
+            toggleWebUi(false)
+        }
+    }
+
+    fun toggleWebUi(enabled: Boolean) {
+        MainScope().launch {
+            dataStore.edit { preferences ->
+                preferences[prefHandler.getBooleanPreferencesKey(PrefKey.UI_WEB)] = enabled
+            }
         }
     }
 
     override fun onSharedPreferenceChanged(
         sharedPreferences: SharedPreferences,
-        key: String?
+        key: String?,
     ) {
         if (key == null) return
         if (key != prefHandler.getKey(PrefKey.AUTO_BACKUP_DIRTY)) {
@@ -340,22 +373,22 @@ open class MyApplication : Application(), SharedPreferences.OnSharedPreferenceCh
             prefHandler.matches(key, PrefKey.DEBUG_LOGGING) -> {
                 setupLogging()
             }
-            prefHandler.matches(key, PrefKey.UI_WEB, PrefKey.WEBUI_PASSWORD, PrefKey.WEBUI_HTTPS) -> {
-                val webUiRunning =
-                    sharedPreferences.getBoolean(prefHandler.getKey(PrefKey.UI_WEB), false)
-                //If user configures https or password, while the web ui is not running, there is nothing to do
-                if (key == prefHandler.getKey(PrefKey.UI_WEB) || webUiRunning) {
-                    controlWebUi(if (webUiRunning) RESTART_ACTION else STOP_ACTION)
-                }
+
+            prefHandler.matches(key, PrefKey.WEBUI_PASSWORD, PrefKey.WEBUI_HTTPS) -> {
+                //WebInputService only "restarts" if it is actually started
+                controlWebUi(RESTART_ACTION)
             }
+
             prefHandler.matches(key, PrefKey.PLANNER_CALENDAR_ID) -> {
                 plannerUtils.onPlannerCalendarIdChanged(
                     sharedPreferences.getString(key, INVALID_CALENDAR_ID)!!
                 )
             }
+
             prefHandler.matches(key, PrefKey.GROUP_WEEK_STARTS) -> {
                 onGroupingStartChanged(Grouping.WEEK)
             }
+
             prefHandler.matches(key, PrefKey.GROUP_MONTH_STARTS) -> {
                 onGroupingStartChanged(Grouping.MONTH)
             }

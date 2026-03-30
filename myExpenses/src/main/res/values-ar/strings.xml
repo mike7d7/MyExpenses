@@ -1080,4 +1080,7 @@
         <item quantity="many">تم العثور على بيانات</item>
         <item quantity="other">تم العثور على بيانات</item>
     </plurals>
+    <string name="menu_templates">القوالب</string>
+    <string name="pref_ui_start_screen_title">شاشة البداية</string>
+    <string name="pref_ui_start_screen_last_visited">آخر شاشة تمت زيارتها</string>
 </resources>

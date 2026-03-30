@@ -2,42 +2,52 @@ package org.totschnig.myexpenses.compose.transactions
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.Functions
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,21 +61,26 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -81,38 +96,49 @@ import org.totschnig.myexpenses.R
 import org.totschnig.myexpenses.activity.StartScreen
 import org.totschnig.myexpenses.compose.AmountText
 import org.totschnig.myexpenses.compose.ColoredAmountText
+import org.totschnig.myexpenses.compose.LocalCurrencyFormatter
 import org.totschnig.myexpenses.compose.OverFlowMenu
 import org.totschnig.myexpenses.compose.TEST_TAG_PAGER
 import org.totschnig.myexpenses.compose.TooltipIconButton
 import org.totschnig.myexpenses.compose.accounts.AccountIndicator
 import org.totschnig.myexpenses.compose.accounts.AccountSummaryV2
+import org.totschnig.myexpenses.compose.conditional
 import org.totschnig.myexpenses.compose.main.AppEvent
 import org.totschnig.myexpenses.compose.main.AppEventHandler
 import org.totschnig.myexpenses.compose.main.parseMenu
 import org.totschnig.myexpenses.compose.main.rememberCollapsingTabRowState
+import org.totschnig.myexpenses.compose.optional
+import org.totschnig.myexpenses.dialog.MenuItem
 import org.totschnig.myexpenses.model.AccountGrouping
 import org.totschnig.myexpenses.model.AccountGroupingKey
+import org.totschnig.myexpenses.model.AccountType
+import org.totschnig.myexpenses.model.CurrencyUnit
+import org.totschnig.myexpenses.util.convAmount
 import org.totschnig.myexpenses.viewmodel.MyExpensesV2ViewModel
 import org.totschnig.myexpenses.viewmodel.data.AggregateAccount
 import org.totschnig.myexpenses.viewmodel.data.BaseAccount
 import org.totschnig.myexpenses.viewmodel.data.FullAccount
 import org.totschnig.myexpenses.viewmodel.data.PageAccount
+import kotlin.math.absoluteValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionScreen(
-    navigationIcon: @Composable (() -> Unit) = {},
+    containerColor: Color = MaterialTheme.colorScheme.background,
     accounts: List<FullAccount>,
     accountGrouping: AccountGrouping<*>,
     availableFilters: List<AccountGroupingKey>,
     selectedAccountId: Long,
     viewModel: MyExpensesV2ViewModel,
-    bottomBar: @Composable () -> Unit,
+    bottomBar: @Composable () -> Unit = {},
+    visibleActionItems: Int,
     onEvent: AppEventHandler,
     onPrepareContextMenuItem: (Int) -> Boolean,
     onPrepareMenuItem: (Int) -> Boolean,
     bankIcon: (@Composable (Modifier, Long) -> Unit)? = null,
-    pageContent: @Composable (PageAccount) -> Unit
+    pageContent: @Composable (PageAccount, Boolean) -> Unit,
+    windowInsets: WindowInsets = ScaffoldDefaults.contentWindowInsets,
+    isFramed: Boolean,
 ) {
     LaunchedEffect(Unit) {
         viewModel.setLastVisited(StartScreen.Transactions)
@@ -143,46 +169,20 @@ fun TransactionScreen(
             }
         }
     }
+    val accountColor = Color(currentAccount.color(LocalResources.current))
 
     var selectedBalanceType by rememberSaveable { mutableStateOf(BalanceType.CURRENT) }
 
     Scaffold(
+        contentWindowInsets = windowInsets,
+        containerColor = containerColor,
         topBar = {
             val isInSelectionMode = viewModel.selectionState.value.isNotEmpty()
-            Box(modifier = Modifier.fillMaxWidth()) {
-                TopAppBar(
-                    navigationIcon = navigationIcon,
-                    title = {
-                        BalanceHeader(
-                            currentAccount = currentAccount,
-                            displayBalanceType = selectedBalanceType,
-                            onDisplayBalanceTypeChange = { newType ->
-                                selectedBalanceType = newType
-                            },
-                            bankIcon = bankIcon
-                        )
-                    },
-                    actions = {
-
-                        TooltipIconButton(
-                            tooltip = stringResource(R.string.menu_search),
-                            imageVector = Icons.Default.Search
-                        ) { onEvent(AppEvent.Search) }
-                        ViewOptionsMenu(
-                            currentAccount = currentAccount,
-                            onEvent = onEvent
-                        )
-                        ActionMenu(
-                            onEvent = onEvent,
-                            onPrepareMenuItem = onPrepareMenuItem
-                        )
-                    },
-                )
-                AnimatedVisibility(
-                    visible = isInSelectionMode,
-                    enter = scaleIn(transformOrigin = TransformOrigin.Center) + fadeIn(),
-                    exit = scaleOut(transformOrigin = TransformOrigin.Center) + fadeOut()
-                ) {
+            Crossfade(
+                targetState = isInSelectionMode,
+                label = "TopBarTransition"
+            ) { selectionMode ->
+                if (selectionMode) {
                     BackHandler {
                         viewModel.clearSelection()
                     }
@@ -217,6 +217,74 @@ fun TransactionScreen(
                             )
                         }
                     )
+                } else {
+                    @Composable
+                    fun isChecked(menuItem: MenuItem): Boolean = when (menuItem) {
+                        MenuItem.Search -> viewModel.filterPersistence.getValue(selectedAccountId)
+                            .whereFilter
+                            .collectAsState(null).value != null
+
+                        MenuItem.ShowStatusHandle -> viewModel.showStatusHandle.flow.collectAsState(
+                            initial = false
+                        ).value
+
+                        else -> false
+                    }
+
+                    TopAppBar(
+                        title = {
+                            BalanceHeader(
+                                modifier = Modifier.conditional(isFramed) {
+                                    padding(start = 4.dp, top = 4.dp)
+                                },
+                                currentAccount = currentAccount,
+                                displayBalanceType = selectedBalanceType,
+                                onDisplayBalanceTypeChange = { newType ->
+                                    selectedBalanceType = newType
+                                },
+                                onCopyBalance = {
+                                    onEvent(AppEvent.CopyToClipBoard(it))
+                                },
+                                onSetNewBalance = {
+                                    onEvent(AppEvent.MenuItemClicked(R.id.NEW_BALANCE_COMMAND))
+                                },
+                                bankIcon = bankIcon
+                            )
+                        },
+                        actions = {
+                            val menuConfig = viewModel.transactionScreenMenu.collectAsState()
+
+                            val filteredItems = menuConfig.value.filter {
+                                onPrepareMenuItem(it.id)
+                            }
+
+                            val quickItems = filteredItems.take(visibleActionItems)
+                            val overflowItems = filteredItems.drop(visibleActionItems)
+
+                            quickItems.forEach {
+                                if (it == MenuItem.Tune) {
+                                    ViewOptionsMenu(
+                                        currentAccount = currentAccount,
+                                        onEvent = onEvent
+                                    )
+                                } else {
+                                    val isChecked = if (it.isCheckable) isChecked(it) else null
+                                    TooltipIconButton(
+                                        tooltip = it.getLabel(LocalContext.current),
+                                        painter = it.painter,
+                                        isChecked = isChecked == true
+                                    ) { onEvent(AppEvent.MenuItemClicked(it.id, isChecked?.not())) }
+                                }
+                            }
+
+                            ActionMenu(
+                                currentAccount = currentAccount,
+                                items = overflowItems,
+                                onEvent = onEvent,
+                                isChecked = ::isChecked
+                            )
+                        },
+                    )
                 }
             }
         },
@@ -248,54 +316,67 @@ fun TransactionScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (accountList.size > 1) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .nestedScroll(tabRowState.nestedScrollConnection)
-                ) {
-                    Column(
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(tabRowState.nestedScrollConnection)
+            ) {
+                if (accountList.size > 1) {
+                    Row(
                         modifier = Modifier
-                            .height(with(LocalDensity.current) { tabRowState.heightPx.toDp() })
-                            .clipToBounds()
+                            .optional(tabRowState.heightPx) {
+                                height(with(LocalDensity.current) { it.toDp() })
+                            }
+                        //.clipToBounds() // check needed if needed
+                        ,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (accountGrouping != AccountGrouping.NONE && availableFilters.size > 1) {
-                                AccountFilterMenu(
-                                    activeFilter = activeFilter,
-                                    availableFilters = availableFilters,
-                                    onFilterChange = viewModel::setFilter,
+                        if (accountGrouping != AccountGrouping.NONE && availableFilters.size > 1) {
+                            AccountFilterMenu(
+                                activeFilter = activeFilter,
+                                availableFilters = availableFilters,
+                                onFilterChange = viewModel::setFilter,
+                            )
+                        }
+                        val selectedTabIndex =
+                            pagerState.currentPage.coerceAtMost(accountList.lastIndex)
+                        SecondaryScrollableTabRow(
+                            selectedTabIndex = selectedTabIndex,
+                            modifier = Modifier
+                                .onSizeChanged { size ->
+                                    if (size.height > (tabRowState.maxHeightPx ?: 0f)) {
+                                        tabRowState.maxHeightPx = size.height.toFloat()
+                                    }
+                                },
+                            edgePadding = 0.dp,
+                            indicator = {
+                                TabRowDefaults.SecondaryIndicator(
+                                    modifier = Modifier.tabIndicatorOffset(selectedTabIndex, matchContentSize = false),
+                                    color = accountColor
                                 )
                             }
-                            val selectedTabIndex =
-                                pagerState.currentPage.coerceAtMost(accountList.lastIndex)
-                            SecondaryScrollableTabRow(
-                                selectedTabIndex = selectedTabIndex,
-                                edgePadding = 0.dp
-                            ) {
-                                accountList.forEachIndexed { index, account ->
-                                    Tab(
-                                        selected = selectedTabIndex == index,
-                                        onClick = {
-                                            coroutineScope.launch {
-                                                pagerState.animateScrollToPage(index)
-                                            }
-                                        },
-                                        text = {
-                                            Text(
-                                                account.labelV2(LocalContext.current),
-                                                maxLines = 1
-                                            )
+                        ) {
+                            accountList.forEachIndexed { index, account ->
+                                Tab(
+                                    selected = selectedTabIndex == index,
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            pagerState.animateScrollToPage(index)
                                         }
-                                    )
-                                }
+                                    },
+                                    text = {
+                                        Text(
+                                            account.labelV2(LocalContext.current),
+                                            maxLines = 1
+                                        )
+                                    }
+                                )
                             }
                         }
                     }
                     HorizontalPager(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.onSurface)
                             .testTag(TEST_TAG_PAGER)
                             .semantics {
                                 collectionInfo = CollectionInfo(1, accounts.size)
@@ -303,35 +384,65 @@ fun TransactionScreen(
                         state = pagerState,
                         pageSpacing = 10.dp,
                         key = { pageIndex ->
-                            accountList.getOrNull(pageIndex)?.id ?: pageIndex                        },
+                            accountList.getOrNull(pageIndex)?.id ?: pageIndex
+                        },
                         verticalAlignment = Alignment.Top,
                     ) { page ->
-                        TransactionListPage(accountList[page], pageContent)
+                        val isCurrentPage = pagerState.currentPage == page
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    val pageOffset =
+                                        (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                                    // Apply a slight shadow or dimming to non-focused pages
+                                    alpha = (1f - pageOffset.absoluteValue).coerceIn(0f, 1f)
+                                }
+                        ) {
+                            TransactionListPage(accountList[page], isCurrentPage, pageContent)
+                        }
                     }
+                } else {
+                    TransactionListPage(accountList.first(), true, pageContent)
                 }
-            } else {
-                TransactionListPage(accountList.first(), pageContent)
             }
 
             val scope = rememberCoroutineScope()
 
-            FloatingActionToolbar(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 16.dp),
-                lastAction = viewModel.lastAction.flow.collectAsState(Action.Expense).value
-            ) { action ->
-
-                scope.launch {
-                    viewModel.lastAction.set(action)
-                }
-
-                onEvent(
-                    AppEvent.CreateTransaction(
-                        action = action,
-                        transferEnabled = accounts.size > 1
+            val fabModifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
+            if (currentAccount is FullAccount && (currentAccount as FullAccount).sealed) {
+                FloatingActionButton(
+                    modifier = fabModifier,
+                    onClick = { },
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+                    elevation = FloatingActionButtonDefaults.elevation(
+                        defaultElevation = 0.dp,
+                        pressedElevation = 0.dp
                     )
-                )
+                ) {
+                    Icon(Icons.Default.Lock, stringResource(R.string.account_closed))
+                }
+            } else {
+                FloatingActionToolbar(
+                    modifier = fabModifier,
+                    lastAction = viewModel.lastAction.flow.collectAsState(Action.Expense).value,
+                    containerColor = accountColor,
+                ) { action ->
+
+                    scope.launch {
+                        viewModel.lastAction.set(action)
+                    }
+
+                    onEvent(
+                        AppEvent.CreateTransaction(
+                            action = action,
+                            transferEnabled = accounts.size > 1
+                        )
+                    )
+                }
             }
         }
     }
@@ -340,11 +451,12 @@ fun TransactionScreen(
 @Composable
 private fun TransactionListPage(
     account: BaseAccount,
-    pageContent: @Composable (PageAccount) -> Unit
+    isCurrent: Boolean,
+    pageContent: @Composable (PageAccount, Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val pageAccount = remember(account) { account.toPageAccount(context = context) }
-    pageContent(pageAccount)
+    pageContent(pageAccount, isCurrent)
 }
 
 enum class BalanceType(
@@ -360,10 +472,12 @@ enum class BalanceType(
 @Composable
 private fun BalanceHeader(
     currentAccount: BaseAccount,
-    displayBalanceType: BalanceType,
     modifier: Modifier = Modifier,
+    displayBalanceType: BalanceType = BalanceType.CURRENT,
     bankIcon: (@Composable (Modifier, Long) -> Unit)? = null,
-    onDisplayBalanceTypeChange: (BalanceType) -> Unit,
+    onDisplayBalanceTypeChange: (BalanceType) -> Unit = {},
+    onCopyBalance: (String) -> Unit = {},
+    onSetNewBalance: () -> Unit = {},
 ) {
     var isSummaryPopupVisible by rememberSaveable { mutableStateOf(false) }
 
@@ -379,60 +493,61 @@ private fun BalanceHeader(
         }
     } ?: BalanceType.CURRENT
 
-    Box {
-        Row(
-            modifier = modifier.clickable {
+
+    val displayBalance = getBalanceForType(
+        currentAccount,
+        validatedBalanceType
+    )
+
+
+    Row(
+        modifier = modifier
+            .semantics {
+                role = Role.Button
+            }
+            .clickable(onClickLabel = stringResource(R.string.content_description_show_balance_details)) {
                 isSummaryPopupVisible = !isSummaryPopupVisible
             },
-            verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        (currentAccount as? FullAccount)?.let {
+            AccountIndicator(currentAccount, bankIcon)
+        }
+        BoxWithConstraints(
+            Modifier
+                .weight(1f, fill = false)
+                .padding(end = 8.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                (currentAccount as? FullAccount)?.let {
-                    AccountIndicator(12.dp, currentAccount, bankIcon)
+
+            val isWideLayout = maxWidth > 300.dp
+
+            // Adaptive Content: Switch between Column and Row
+            if (isWideLayout) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    AccountLabel(currentAccount, Modifier.weight(1f, fill = false))
+                    BalanceSection(validatedBalanceType, displayBalance, currentAccount)
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = currentAccount.labelV2(LocalContext.current),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val iconTint = when (validatedBalanceType) {
-                            BalanceType.CLEARED -> colorResource(id = R.color.CLEARED)
-                            BalanceType.RECONCILED -> colorResource(id = R.color.RECONCILED)
-                            else -> colorResource(id = R.color.UNRECONCILED)
-                        }
-
-                        Icon(
-                            imageVector = validatedBalanceType.icon,
-                            contentDescription = stringResource(validatedBalanceType.resourceId),
-                            modifier = Modifier
-                                .padding(end = 8.dp)
-                                .size(18.dp),
-                            tint = iconTint
-                        )
-
-                        AmountText(
-                            getBalanceForType(
-                                currentAccount,
-                                validatedBalanceType
-                            ), currentAccount.currencyUnit,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp
-                        )
-                    }
+            } else {
+                Column {
+                    AccountLabel(currentAccount)
+                    BalanceSection(validatedBalanceType, displayBalance, currentAccount)
                 }
             }
-            Icon(
-                modifier = Modifier.rotate(rotationAngle),
-                imageVector = Icons.Default.ExpandLess,
-                contentDescription = "stringResource(R.string.show_balance_summary)"
-            )
         }
+
+        Icon(
+            modifier = Modifier.rotate(rotationAngle),
+            imageVector = Icons.Default.ExpandLess,
+            contentDescription = null
+        )
 
         // The Popup that shows the full summary
         if (isSummaryPopupVisible) {
+
+            val currencyFormatter = LocalCurrencyFormatter.current
 
             Popup(
                 onDismissRequest = { isSummaryPopupVisible = false },
@@ -450,20 +565,112 @@ private fun BalanceHeader(
             ) {
                 //overwrite TitleTypography
                 ProvideTextStyle(MaterialTheme.typography.bodyMedium) {
-                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .widthIn(max = 560.dp)
+                            .padding(horizontal = 16.dp)
+                    ) {
                         Card(
                             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                         ) {
-                            AccountSummaryV2(
-                                currentAccount,
-                                displayBalanceType,
-                                onDisplayBalanceTypeChange
-                            )
+                            Column(
+                                modifier = Modifier.padding(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = 16.dp
+                                )
+                            ) {
+                                AccountSummaryV2(
+                                    currentAccount,
+                                    displayBalanceType,
+                                    onDisplayBalanceTypeChange
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                                FlowRow(
+                                    modifier = Modifier
+                                        .fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    TextButton(onClick = {
+                                        onCopyBalance(
+                                            currencyFormatter.convAmount(
+                                                displayBalance,
+                                                currentAccount.currencyUnit
+                                            )
+                                        )
+                                        isSummaryPopupVisible = false
+                                    }) {
+                                        Icon(
+                                            Icons.Default.ContentCopy,
+                                            contentDescription = null
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(stringResource(R.string.copy_text))
+                                    }
+
+                                    if (currentAccount is FullAccount) {
+                                        TextButton(onClick = {
+                                            onSetNewBalance()
+                                            isSummaryPopupVisible = false
+                                        }) {
+                                            Icon(
+                                                Icons.Default.Edit,
+                                                contentDescription = null
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(stringResource(R.string.new_balance))
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AccountLabel(
+    account: BaseAccount,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        modifier = modifier,
+        text = account.labelV2(LocalContext.current),
+        style = MaterialTheme.typography.titleMedium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
+@Composable
+private fun BalanceSection(
+    type: BalanceType,
+    balance: Long,
+    account: BaseAccount,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        val iconTint = when (type) {
+            BalanceType.CLEARED -> colorResource(id = R.color.CLEARED)
+            BalanceType.RECONCILED -> colorResource(id = R.color.RECONCILED)
+            else -> colorResource(id = R.color.UNRECONCILED)
+        }
+        Icon(
+            imageVector = type.icon,
+            contentDescription = stringResource(type.resourceId),
+            modifier = Modifier
+                .padding(end = 8.dp)
+                .size(18.dp),
+            tint = iconTint
+        )
+        AmountText(
+            balance, account.currencyUnit,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp
+        )
     }
 }
 
@@ -482,4 +689,26 @@ private fun getBalanceForType(account: BaseAccount, type: BalanceType): Long {
             else -> account.equivalentCurrentBalance
         }
     }
+}
+
+@Preview(fontScale = 2f)
+@Composable
+fun HeaderPreview() {
+    BalanceHeader(
+        currentAccount = FullAccount(
+            id = 1,
+            label = "Account",
+            description = "Description",
+            currencyUnit = CurrencyUnit.DebugInstance,
+            color = android.graphics.Color.RED,
+            openingBalance = 0,
+            currentBalance = 1000,
+            sumIncome = 2000,
+            sumExpense = 1000,
+            sealed = true,
+            type = AccountType.CASH,
+            criterion = 5000,
+            excludeFromTotals = true
+        )
+    )
 }

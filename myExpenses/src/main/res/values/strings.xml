@@ -857,6 +857,7 @@
     <string name="new_version">New version</string>
     <string name="menu_new_debt">New debt</string>
     <string name="debt_owes_me">%s owes me</string>
+    <!-- %s is replaced with the name of the party to whom the debt is owed -->
     <string name="debt_I_owe">I owe %s</string>
     <!-- Appears in the transaction form as label for the checkbox that allows to link the transaction to a debt  -->
     <string name="debt">Debt</string>
@@ -1121,4 +1122,13 @@
     <string name="content_description_clear_party">Clear selected party</string>
     <string name="content_description_browse_device_files">Browse files on this device</string>
     <string name="content_description_select_recent_file">Select from recent files</string>
+    <!-- Content description used by Talkback for the account title on the transaction screen, which when activated (tapped upon) opens a popup with detailed information about the account -->
+    <string name="content_description_show_balance_details">Show detailed information</string>
+    <string name="menu_templates">Templates</string>
+    <!-- Title of a preference where user configures if app starts with Account list, Balance Sheet, Transactions, or Last visited -->
+    <string name="pref_ui_start_screen_title">Start screen</string>
+    <!-- Preference option for having app start on last visited Screen -->
+    <string name="pref_ui_start_screen_last_visited">Last visited</string>
+    <!-- Entry in a list of preferences for customizing different menus, one of them being the "Main navigation" menu, where user switches between Accounts and Transactions screens, or selects other top level destinations, e.g. Templates -->
+    <string name="main_navigation">Main navigation</string>
 </resources>

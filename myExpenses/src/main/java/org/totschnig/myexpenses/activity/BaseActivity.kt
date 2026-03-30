@@ -277,16 +277,18 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
         get() = (supportFragmentManager.findFragmentByTag(PROGRESS_TAG) as? ProgressDialogFragment)
 
     fun copyToClipboard(text: String) {
-        showSnackBar(
-            try {
-                ContextCompat.getSystemService(this, ClipboardManager::class.java)
-                    ?.setPrimaryClip(ClipData.newPlainText(null, text))
+        try {
+            ContextCompat.getSystemService(this, ClipboardManager::class.java)!!
+                .setPrimaryClip(ClipData.newPlainText(null, text))
+        } catch (e: RuntimeException) {
+            report(e)
+            showSnackBar(e.safeMessage)
+        }
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+            showSnackBar(
                 "${getString(R.string.toast_text_copied)}: $text"
-            } catch (e: RuntimeException) {
-                report(e)
-                e.safeMessage
-            }
-        )
+            )
+        }
     }
 
     fun sendEmail(
@@ -300,7 +302,7 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
                 .body(body)
                 .start()
         ) {
-            showMessage(body)
+            showMessage(message = body, title = subject)
         }
     }
 
@@ -346,7 +348,7 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
         ) {
             requestNotificationPermission(PermissionHelper.PERMISSIONS_REQUEST_NOTIFICATIONS_WEBUI)
         } else {
-            prefHandler.putBoolean(PrefKey.UI_WEB, true)
+            baseViewModel.toggleWebUi(true)
             onWebUiActivated()
         }
     }
@@ -736,7 +738,8 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
                 try {
                     startActivity(intent)
                 } catch (_: ActivityNotFoundException) {
-                    Toast.makeText(this, "Could not open Security Settings", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Could not open Security Settings", Toast.LENGTH_SHORT)
+                        .show()
                 }
             }
         )
@@ -1130,13 +1133,14 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
     @JvmOverloads
     open fun showMessage(
         message: CharSequence,
+        title: CharSequence? = null,
         positive: MessageDialogFragment.Button? = MessageDialogFragment.okButton(),
         neutral: MessageDialogFragment.Button? = null,
         negative: MessageDialogFragment.Button? = null,
         cancellable: Boolean = true,
     ) {
         lifecycleScope.launchWhenResumed {
-            MessageDialogFragment.newInstance(null, message, positive, neutral, negative).apply {
+            MessageDialogFragment.newInstance(title, message, positive, neutral, negative).apply {
                 isCancelable = cancellable
             }.show(supportFragmentManager, "MESSAGE")
         }
@@ -1446,6 +1450,14 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
             }
         }
 
+    open fun onEditTransactionResult() {}
+
+    private val editLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            onEditTransactionResult()
+        }
+    }
+
     protected val calledFromOnboarding: Boolean
         get() = callingActivity?.let {
             Utils.getSimpleClassNameFromComponentName(it)
@@ -1458,7 +1470,7 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
         (application as MyApplication).invalidateHomeCurrency()
         if (!isFinishing) {
             finishAffinity()
-            startActivity(Intent(this, MyExpenses::class.java).apply {
+            startActivity(Intent(this, prefHandler.mainScreenClass).apply {
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             })
         }
@@ -1588,7 +1600,7 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
     open suspend fun getEditIntent(): Intent? = Intent(this, ExpenseEdit::class.java)
 
     open fun startEdit(intent: Intent) {
-        startActivityForResult(intent, EDIT_REQUEST)
+        editLauncher.launch(intent)
     }
 
     protected fun setupWithFragment(
@@ -1723,21 +1735,21 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
                 result.onSuccess { (uri, name) ->
                     recordUsage(ContribFeature.PRINT)
                     showMessage(
-                        getString(R.string.export_sdcard_success, name),
-                        MessageDialogFragment.Button(
+                        message = getString(R.string.export_sdcard_success, name),
+                        positive = MessageDialogFragment.Button(
                             R.string.menu_open,
                             R.id.OPEN_PDF_COMMAND,
                             uri.toString(),
                             true
                         ),
-                        MessageDialogFragment.nullButton(R.string.button_label_close),
-                        MessageDialogFragment.Button(
+                        neutral = MessageDialogFragment.nullButton(R.string.button_label_close),
+                        negative = MessageDialogFragment.Button(
                             R.string.share,
                             R.id.SHARE_PDF_COMMAND,
                             uri.toString(),
                             true
                         ),
-                        false
+                        cancellable = false
                     )
                 }.onFailure {
                     report(it)

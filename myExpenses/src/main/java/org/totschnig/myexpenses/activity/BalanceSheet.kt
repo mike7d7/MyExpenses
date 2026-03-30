@@ -100,6 +100,8 @@ fun BalanceSheetOptions(
     showChartState: MutableState<Boolean>,
     highlight: MutableState<Triple<Boolean, Int, Long?>?>,
     onPrint: () -> Unit,
+    isFullScreen: Boolean = true,
+    onToggleFullScreen: (() -> Unit)? = null,
 ) {
     TooltipIconButton(
         tooltip = stringResource(R.string.menu_print),
@@ -113,8 +115,8 @@ fun BalanceSheetOptions(
             showHiddenState?.let {
                 CheckableMenuEntry(
                     label = R.string.show_invisible,
-                    command = "TOGGLE_SHOW_INVISIBLE",
-                    it.value
+                    isChecked = it.value,
+                    command = "TOGGLE_SHOW_INVISIBLE"
                 ) {
                     showHiddenState.value = !showHiddenState.value
                 }
@@ -122,19 +124,27 @@ fun BalanceSheetOptions(
             showZeroState?.let {
                 CheckableMenuEntry(
                     label = R.string.show_zero,
-                    command = "TOGGLE_SHOW_ZERO",
-                    it.value
+                    isChecked = it.value,
+                    command = "TOGGLE_SHOW_ZERO"
                 ) {
                     showZeroState.value = !showZeroState.value
                 }
             },
             CheckableMenuEntry(
                 label = R.string.menu_chart,
-                command = "TOGGLE_CHART_BALANCE",
-                showChartState.value
+                isChecked = showChartState.value,
+                command = "TOGGLE_CHART_BALANCE"
             ) {
                 showChartState.value = !showChartState.value
                 highlight.value = null
+            },
+            onToggleFullScreen?.let {
+                CheckableMenuEntry(
+                    label = R.string.full_screen,
+                    isChecked = isFullScreen,
+                    command = "FULL_SCREEN",
+                    action = onToggleFullScreen
+                )
             }
         )
     )
@@ -180,7 +190,7 @@ fun BalanceSheetView(
                     showZeroState.takeIf { accounts.any { it.currentBalance == 0L } },
                     showChartState,
                     highlight,
-                    onPrint
+                    onPrint,
                 )
             },
             colors = TopAppBarDefaults.topAppBarColors()

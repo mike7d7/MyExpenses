@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -34,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -48,6 +51,8 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.dimensionResource
@@ -197,7 +202,6 @@ fun AccountList(
 
 @Composable
 fun AccountListV2(
-    modifier: Modifier = Modifier,
     scaffoldPadding: PaddingValues = PaddingValues(0.dp),
     accountData: List<FullAccount>,
     grouping: AccountGrouping<*>,
@@ -205,7 +209,7 @@ fun AccountListV2(
     listState: LazyListState,
     expansionHandlerGroups: org.totschnig.myexpenses.compose.ExpansionHandler,
     onSelected: (FullAccount) -> Unit = {},
-    onGroupSelected: (AccountGroupingKey) -> Unit = {},
+    onGroupSelected: (AccountGroupingKey?) -> Unit = {},
     onEvent: AccountEventHandler,
     bankIcon: (@Composable (Modifier, Long) -> Unit)? = null,
     flags: List<AccountFlag> = emptyList(),
@@ -222,8 +226,12 @@ fun AccountListV2(
         grouped.keys.sortedWith(grouping.comparator as Comparator<in AccountGroupingKey>)
     }
 
+    val layoutDirection = LocalLayoutDirection.current
     LazyColumnWithScrollbar(
-        modifier = modifier,
+        modifier = Modifier.padding(
+            start = scaffoldPadding.calculateStartPadding(layoutDirection),
+            end = scaffoldPadding.calculateEndPadding(layoutDirection)
+        ),
         state = listState,
         itemsAvailable = accountData.size + grouped.size,
         testTag = TEST_TAG_ACCOUNTS,
@@ -264,6 +272,20 @@ fun AccountListV2(
                         )
                     }
                 }
+            }
+        }
+        if (grouped.size > 1) {
+            item {
+                HeaderV2(
+                    header = AccountGroupingKey.Ungrouped.title(context),
+                    currency = LocalHomeCurrency.current,
+                    total = accountData.filter { !it.excludeFromTotals }.sumOf {
+                        it.equivalentCurrentBalance
+                    },
+                    onToggleExpand = null,
+                    onNavigate = { onGroupSelected(null) },
+                    dividerThickness = 4.dp
+                )
             }
         }
     }
@@ -316,20 +338,23 @@ private fun Header(
 @Composable
 private fun HeaderV2(
     header: String,
-    onToggleExpand: () -> Unit,
+    onToggleExpand: (() -> Unit)?,
     onNavigate: (() -> Unit)?,
     total: Long,
     currency: CurrencyUnit,
+    dividerThickness: Dp = 2.dp,
 ) {
 
     val format = LocalCurrencyFormatter.current
     HorizontalDivider(
         color = colorResource(id = androidx.appcompat.R.color.material_grey_300),
-        thickness = 2.dp
+        thickness = dividerThickness
     )
     Row(
         modifier = Modifier
-            .clickable(onClick = onToggleExpand)
+            .optional(onToggleExpand) {
+                clickable(onClick = it)
+            }
             .heightIn(min = 48.dp)
             .semantics(mergeDescendants = true) {}
             .padding(start = 16.dp, end = 4.dp),
@@ -418,7 +443,14 @@ fun AccountCardV2(
             account = account,
             bankIcon = bankIcon
         )
-        Text(text = account.label, modifier = Modifier.weight(1f))
+        if (account.description.isNullOrBlank()) {
+            Text(text = account.label, modifier = Modifier.weight(1f))
+        } else {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = account.label)
+                Text(text = account.description)
+            }
+        }
         Text(format.convAmount(account.currentBalance, account.currencyUnit))
         OverFlowMenu(
             menu = accountMenu(
@@ -434,10 +466,12 @@ fun AccountCardV2(
 
 @Composable
 fun AccountIndicator(
-    size: Dp = (dimensionResource(id = R.dimen.account_list_aggregate_letter_font_size).value * 2).dp,
     account: FullAccount,
-    bankIcon: @Composable ((Modifier, Long) -> Unit)?,
+    bankIcon: @Composable ((Modifier, Long) -> Unit)? = null,
 ) {
+    val fontSize = 13.sp
+    val size = with(LocalDensity.current) { (fontSize * 2).toDp() }
+
     val color = Color(account.color(resources = LocalResources.current))
 
     val modifier = Modifier
@@ -460,8 +494,9 @@ fun AccountIndicator(
                 modifier,
                 color
             ) {
+                //This is only used in V1
                 if (account.isAggregate) {
-                    Text(fontSize = 13.sp, text = SIGMA, color = Color.White)
+                    Text(fontSize = fontSize, text = SIGMA, color = Color.White)
                 }
             }
         } else bankIcon.invoke(modifier, account.bankId)
@@ -728,20 +763,19 @@ fun AccountSummaryV2(
     displayBalanceType: BalanceType,
     onDisplayBalanceTypeChange: (BalanceType) -> Unit,
 ) {
-    Column(modifier = Modifier.padding(16.dp)) {
-        when (account) {
-            is FullAccount -> AccountSummaryV2(
-                account,
-                displayBalanceType,
-                onDisplayBalanceTypeChange
-            )
 
-            is AggregateAccount -> AccountSummaryV2(
-                account,
-                displayBalanceType,
-                onDisplayBalanceTypeChange
-            )
-        }
+    when (account) {
+        is FullAccount -> AccountSummaryV2(
+            account,
+            displayBalanceType,
+            onDisplayBalanceTypeChange
+        )
+
+        is AggregateAccount -> AccountSummaryV2(
+            account,
+            displayBalanceType,
+            onDisplayBalanceTypeChange
+        )
     }
 }
 
@@ -918,23 +952,23 @@ private fun accountMenu(
         add(
             SubMenuEntry(
                 label = R.string.menu_flag,
-                icon = Icons.Filled.Flag,
                 subMenu = flags.filter { it.id != DEFAULT_FLAG_ID }.map {
                     val isChecked = account.flag.id == it.id
                     CheckableMenuEntry(
                         label = UiText.StringValue(
                             it.title(context)
                         ),
+                        isChecked = isChecked,
                         command = "SET_FLAG",
-                        isRadio = true,
-                        isChecked = isChecked
+                        isRadio = true
                     ) {
                         onEvent(
                             AccountEvent.SetFlag(if (isChecked) DEFAULT_FLAG_ID else it.id),
                             account
                         )
                     }
-                }
+                },
+                icon = Icons.Filled.Flag
             )
         )
         add(
@@ -944,8 +978,8 @@ private fun accountMenu(
         )
         add(
             CheckableMenuEntry(
-                isChecked = account.excludeFromTotals,
                 label = R.string.menu_exclude_from_totals,
+                isChecked = account.excludeFromTotals,
                 command = "EXCLUDE_FROM_TOTALS_COMMAND"
             ) {
                 onEvent(AccountEvent.ToggleExcludeFromTotals, account)
@@ -953,8 +987,8 @@ private fun accountMenu(
         if (account.currency != homeCurrency.code) {
             add(
                 CheckableMenuEntry(
-                    isChecked = account.dynamic,
                     label = R.string.dynamic_exchange_rate,
+                    isChecked = account.dynamic,
                     command = "DYNAMIC_EXCHANGE_RATE"
                 ) {
                     onEvent(AccountEvent.ToggleDynamicExchangeRate, account)
@@ -1076,7 +1110,7 @@ private fun AccountPreview2() {
         onEvent = object : AccountEventHandler {
             override fun invoke(
                 event: AccountEvent,
-                account: FullAccount
+                account: FullAccount,
             ) {
             }
         }
@@ -1088,4 +1122,26 @@ private fun AccountPreview2() {
 fun MixedText() {
     val symbol = '﷼'
     Text("1 $symbol = 345 $")
+}
+
+@Preview(fontScale = 2f)
+@Composable
+fun AccountIndicator() {
+    AccountIndicator(
+        account = FullAccount(
+            id = 1,
+            label = "Account",
+            description = "Description",
+            currencyUnit = CurrencyUnit.DebugInstance,
+            color = android.graphics.Color.RED,
+            openingBalance = 0,
+            currentBalance = 1000,
+            sumIncome = 2000,
+            sumExpense = 1000,
+            sealed = true,
+            type = AccountType.CASH,
+            criterion = 5000,
+            excludeFromTotals = true
+        )
+    )
 }

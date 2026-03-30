@@ -80,6 +80,7 @@ import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_CURRENCY_SELF;
 import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_DATE;
 import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_EQUIVALENT_AMOUNT;
 import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_EXCHANGE_RATE;
+import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_EXCLUDE_FROM_TOTALS;
 import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_FLAG;
 import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_FLAG_SORT_KEY;
 import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_GROUPING;
@@ -105,7 +106,6 @@ import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_TEMPLATEID;
 import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_TITLE;
 import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_TRANSACTIONID;
 import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_TRANSFER_ACCOUNT;
-import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_TRANSFER_PEER;
 import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_TYPE;
 import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_TYPE_SORT_KEY;
 import static org.totschnig.myexpenses.provider.ConstantsKt.KEY_URI;
@@ -150,10 +150,9 @@ import static org.totschnig.myexpenses.provider.ConstantsKt.VIEW_PRIORITIZED_PRI
 import static org.totschnig.myexpenses.provider.ConstantsKt.VIEW_TEMPLATES_ALL;
 import static org.totschnig.myexpenses.provider.ConstantsKt.VIEW_TEMPLATES_EXTENDED;
 import static org.totschnig.myexpenses.provider.DataBaseAccount.HOME_AGGREGATE_ID;
-import static org.totschnig.myexpenses.provider.DatabaseConstants.WHERE_DEPENDENT;
 import static org.totschnig.myexpenses.provider.DatabaseConstants.WHERE_NOT_SPLIT;
-import static org.totschnig.myexpenses.provider.DatabaseConstants.WHERE_SELF_OR_PEER;
 import static org.totschnig.myexpenses.provider.DatabaseConstants.WHERE_SELF_OR_RELATED;
+import static org.totschnig.myexpenses.provider.DbConstantsKt.CATEGORY_DEPTH_QUERY;
 import static org.totschnig.myexpenses.provider.DbConstantsKt.CTE_SEARCH;
 import static org.totschnig.myexpenses.provider.DbConstantsKt.accountWithTypeAndFlag;
 import static org.totschnig.myexpenses.provider.DbConstantsKt.amountCteForDebts;
@@ -345,6 +344,7 @@ public class TransactionProvider extends BaseTransactionProvider {
   public static final String QUERY_PARAMETER_WITH_COUNT = "count";
   public static final String QUERY_PARAMETER_WITH_INSTANCE = "withInstance";
   public static final String QUERY_PARAMETER_HIERARCHICAL = "hierarchical";
+  public static final String QUERY_PARAMETER_DEPTH = "depth";
   public static final String QUERY_PARAMETER_CATEGORY_SEPARATOR = "categorySeparator";
   public static final String QUERY_PARAMETER_SHORTEN_COMMENT = "shortenComment";
   public static final String QUERY_PARAMETER_SEARCH = "search";
@@ -457,6 +457,8 @@ public class TransactionProvider extends BaseTransactionProvider {
         if (sortOrder == null) {
           sortOrder = KEY_DATE + " DESC";
         }
+        sortOrder += ", " + KEY_ROWID + (sortOrder.contains(" DESC") ? " DESC" : " ASC");
+
         boolean forHome = uri.getQueryParameter(KEY_ACCOUNTID) == null && uri.getQueryParameter(KEY_CURRENCY) == null && uri.getQueryParameter(KEY_PARENTID) == null;
         if (forCatId != null) {
           String selector = transactionQuerySelector(uri, CTE_SEARCH);
@@ -515,6 +517,9 @@ public class TransactionProvider extends BaseTransactionProvider {
         if (mappedObjects != null) {
           String sql = categoryTreeWithMappedObjects(selection, projection, mappedObjects.equals("2"));
           return measureAndLogQuery(db, uri, sql, selection, selectionArgs);
+        }
+        if (uri.getBooleanQueryParameter(QUERY_PARAMETER_DEPTH, false)) {
+          return measureAndLogQuery(db, uri, CATEGORY_DEPTH_QUERY, null, null);
         }
         if (uri.getBooleanQueryParameter(QUERY_PARAMETER_HIERARCHICAL, false)) {
           final boolean withSum = projection != null && Arrays.asList(projection).contains(KEY_SUM);
@@ -587,6 +592,8 @@ public class TransactionProvider extends BaseTransactionProvider {
                     Sort.Companion.preferredOrderByForAccounts(PrefKey.SORT_ORDER_ACCOUNTS, prefHandler, Sort.LABEL, getCollate(), null);
             if (uri.getBooleanQueryParameter(QUERY_PARAMETER_BALANCE_SHEET, false)) {
               sortOrder = KEY_TYPE_SORT_KEY + " DESC, " + sortOrder;
+            } else {
+              sortOrder = getSortByFlag() + sortOrder;
             }
           }
           if (projection != null) {
@@ -643,6 +650,7 @@ public class TransactionProvider extends BaseTransactionProvider {
           additionalWhere.append(KEY_ROWID).append("=").append(group);
         } else {
           qb = SupportSQLiteQueryBuilder.builder(TABLE_ACCOUNTS);
+          additionalWhere.append(KEY_EXCLUDE_FROM_TOTALS).append("=0");
           projection = aggregateHomeProjection(projection);
         }
           break;
@@ -1251,36 +1259,7 @@ public class TransactionProvider extends BaseTransactionProvider {
     maybeSetDirty(uriMatch);
     switch (uriMatch) {
       case TRANSACTIONS -> count = db.delete(TABLE_TRANSACTIONS, where, whereArgs);
-      case TRANSACTION_ID -> {
-        //maybe TODO ?: where and whereArgs are ignored
-        segment = uri.getPathSegments().get(1);
-        //when we are deleting a transfer whose peer is part of a split, we cannot delete the peer,
-        //because the split would be left in an invalid state, hence we transform the peer to a normal split part
-        //first we find out the account label
-        db.beginTransaction();
-        try {
-          ContentValues args = new ContentValues();
-          args.putNull(KEY_TRANSFER_ACCOUNT);
-          args.putNull(KEY_TRANSFER_PEER);
-          MoreDbUtilsKt.update(db, TABLE_TRANSACTIONS,
-                  args,
-                  KEY_TRANSFER_PEER + " = ? AND " + KEY_PARENTID + " IS NOT null",
-                  new String[]{segment});
-          //we delete the transaction, its children and its transfer peer, and transfer peers of its children
-          if (uri.getQueryParameter(QUERY_PARAMETER_MARK_VOID) == null) {
-            //we delete the parent separately, so that the changes trigger can correctly record the parent uuid
-            count = db.delete(TABLE_TRANSACTIONS, WHERE_DEPENDENT, new String[]{segment, segment});
-            count += db.delete(TABLE_TRANSACTIONS, WHERE_SELF_OR_PEER, new String[]{segment, segment});
-          } else {
-            ContentValues v = new ContentValues();
-            v.put(KEY_CR_STATUS, CrStatus.VOID.name());
-            count = MoreDbUtilsKt.update(db, TABLE_TRANSACTIONS, v, WHERE_SELF_OR_RELATED, new String[]{segment, segment, segment});
-          }
-          db.setTransactionSuccessful();
-        } finally {
-          db.endTransaction();
-        }
-      }
+      case TRANSACTION_ID -> count = deleteTransaction(db, uri);
       case TEMPLATES -> count = db.delete(TABLE_TEMPLATES, where, whereArgs);
       case TEMPLATE_ID -> count = db.delete(TABLE_TEMPLATES,
               KEY_ROWID + " = " + uri.getLastPathSegment() + prefixAnd(where), whereArgs);
@@ -1288,9 +1267,6 @@ public class TransactionProvider extends BaseTransactionProvider {
       case ACCOUNTS -> count = db.delete(TABLE_ACCOUNTS, where, whereArgs);
       case ACCOUNT_ID -> count = db.delete(TABLE_ACCOUNTS,
               KEY_ROWID + " = " + uri.getLastPathSegment() + prefixAnd(where), whereArgs);
-
-      //update aggregate cursor
-      //getContext().getContentResolver().notifyChange(AGGREGATES_URI, null);
       case CATEGORIES ->
               count = db.delete(TABLE_CATEGORIES, KEY_ROWID + " != " + SPLIT_CATID + prefixAnd(where),
                       whereArgs);

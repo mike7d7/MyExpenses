@@ -40,7 +40,7 @@
         my:useSimpleSummaryProvider="true" />
 
     <ListPreference
-        android:defaultValue="V1"
+        android:defaultValue="V2"
         android:entries="@array/pref_ui_main_screen_version_values"
         android:entryValues="@array/pref_ui_main_screen_version_values"
         android:key="@string/pref_ui_main_screen_version_key"
@@ -52,12 +52,17 @@
         android:summary="@string/customize"
         android:title="@string/menu" />
 
+    <org.totschnig.myexpenses.preference.PopupMenuPreference
+        android:key="@string/pref_customize_menu_v2_key"
+        android:summary="@string/customize"
+        android:title="@string/menu" />
+
     <ListPreference
         android:defaultValue="LastVisited"
         android:entries="@array/pref_start_screen_entries"
         android:entryValues="@array/pref_start_screen_values"
         android:key="@string/pref_ui_start_screen_key"
-        android:title="Start screen"
+        android:title="@string/pref_ui_start_screen_title"
         my:useSimpleSummaryProvider="true" />
 
 

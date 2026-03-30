@@ -747,7 +747,7 @@
     <!-- If this mode is active, the action button will open the camera for scanning a receipt  -->
     <string name="menu_scan_mode">Mode Scan</string>
     <!-- Button that triggers the scan operation -->
-    <string name="button_scan">Analyse</string>
+    <string name="button_scan">Scanner</string>
     <string name="pref_ocr_total_indicators_title">Indicateurs du montant total</string>
     <string name="pref_ocr_total_indicators_summary">Une liste de chaînes, qui identifie la valeur totale d\'un reçu. Mettez chaque valeur sur une nouvelle ligne. Laissez vide pour restaurer la valeur par défaut.</string>
     <string name="pref_ocr_date_formats_title">Formats de date</string>
@@ -1061,4 +1061,9 @@
     <string name="content_description_clear_party">Supprimer le tiers sélectionné</string>
     <string name="content_description_browse_device_files">Parcourez les fichiers sur cet appareil</string>
     <string name="content_description_select_recent_file">Sélectionnez parmi des fichiers récents</string>
+    <string name="content_description_show_balance_details">Afficher des informations détaillées</string>
+    <string name="menu_templates">Modèles</string>
+    <string name="pref_ui_start_screen_title">Écran de démarrage</string>
+    <string name="pref_ui_start_screen_last_visited">Dernier consulté</string>
+    <string name="main_navigation">Navigation principale</string>
 </resources>

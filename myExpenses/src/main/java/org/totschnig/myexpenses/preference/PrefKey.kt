@@ -186,6 +186,9 @@ enum class PrefKey(internal val resId: Int, internal val _key: String?) {
     DEFAULT_TRANSFER_CATEGORY(R.string.pref_default_transfer_category_key),
     PROTECTION_ALLOW_SCREENSHOT(R.string.pref_protection_allow_screenshot_key),
     CUSTOMIZE_MAIN_MENU(R.string.pref_customize_main_menu_key),
+    CUSTOMIZE_MENU_V2(R.string.pref_customize_menu_v2_key),
+    CUSTOMIZE_MENU_V2_MAIN(R.string.pref_customize_menu_v2_main_key),
+    CUSTOMIZE_MENU_V2_TRANSACTIONS(R.string.pref_customize_menu_v2_transactions_key),
     REMOVE_LOCAL_CALENDAR(R.string.pref_remove_local_calendar_key),
     TIME_PICKER_INPUT_MODE("timePickerInputMode"),
     DATE_PICKER_INPUT_MODE("datePickerInputMode"),
@@ -217,7 +220,8 @@ enum class PrefKey(internal val resId: Int, internal val _key: String?) {
     UI_MAIN_SCREEN_VERSION(R.string.pref_ui_main_screen_version_key),
     UI_START_SCREEN(R.string.pref_ui_start_screen_key),
     UI_SCREEN_LAST_VISITED("ui_screen_last_visited"),
-    UI_SCREEN_LAST_ACCOUNT_GROUP_FILTER("ui_screen_last_account_group_filter")
+    UI_SCREEN_LAST_ACCOUNT_GROUP_FILTER("ui_screen_last_account_group_filter"),
+    TELL_A_FRIEND(R.string.pref_tell_a_friend_key)
     ;
 
     @Deprecated("")

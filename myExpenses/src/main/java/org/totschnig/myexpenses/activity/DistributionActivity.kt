@@ -208,15 +208,16 @@ class DistributionActivity : DistributionBaseActivity<DistributionViewModel>(),
 
                 val typeFlags = viewModel.typeFlags.collectAsState(initial = false to true)
                 val (showIncome, showExpense) = typeFlags.value
+                val whereFilter = viewModel.whereFilter.collectAsState().value
                 when {
                     showIncome && showExpense -> {
-                        RenderCombined(viewModel.whereFilter.collectAsState().value, ::clearFilter)
+                        RenderCombined(whereFilter, ::clearFilter)
                     }
 
                     !showIncome && !showExpense -> throw IllegalStateException()
                     else -> RenderSingle(
                         showIncome,
-                        viewModel.whereFilter.collectAsState().value,
+                        whereFilter,
                         ::clearFilter
                     )
                 }
@@ -551,8 +552,8 @@ class DistributionActivity : DistributionBaseActivity<DistributionViewModel>(),
                         add(
                             MenuEntry(
                                 label = R.string.menu_show_transactions,
-                                icon = Icons.AutoMirrored.Filled.List,
-                                command = "SHOW_TRANSACTIONS"
+                                command = "SHOW_TRANSACTIONS",
+                                icon = Icons.AutoMirrored.Filled.List
                             ) {
                                 lifecycleScope.launch {
                                     showTransactions(
@@ -566,8 +567,8 @@ class DistributionActivity : DistributionBaseActivity<DistributionViewModel>(),
                             add(
                                 MenuEntry(
                                     label = R.string.color,
-                                    icon = Icons.Filled.Palette,
-                                    command = "COLOR"
+                                    command = "COLOR",
+                                    icon = Icons.Filled.Palette
                                 ) {
                                     editCategoryColor(category.id, category.color)
                                 }

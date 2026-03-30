@@ -22,7 +22,9 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Surface
@@ -36,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
@@ -141,16 +144,18 @@ fun DonutInABox(
                 ).forCompose(color, excessColor)
             )
         )
-
-        Text(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .semantics {
-                    this.contentDescription = DisplayProgress.contentDescription(context, progress)
-                },
-            text = progress.displayProgress,
-            fontSize = fontSize,
-        )
+        ProvideTextStyle(MaterialTheme.typography.bodyMedium) {
+            Text(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .semantics {
+                        this.contentDescription =
+                            DisplayProgress.contentDescription(context, progress)
+                    },
+                text = progress.displayProgress,
+                fontSize = fontSize,
+            )
+        }
     }
 }
 
@@ -294,4 +299,13 @@ fun LazyListScope.simpleStickyHeader(content: @Composable (Modifier) -> Unit) {
             }
         }
     }
+}
+
+/**
+ * Returns a high-contrast content color (Black or White)
+ * for any arbitrary background color.
+ */
+fun Color.calculateOnColor(): Color {
+    // luminance() returns a value between 0.0 (Black) and 1.0 (White)
+    return if (this.luminance() > 0.5f) Color.Black else Color.White
 }

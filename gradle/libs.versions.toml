@@ -1,14 +1,14 @@
 [versions]
 accompanist = "0.37.3"
 acraVersion = "5.13.1"
-activityCompose = "1.12.3"
+activityCompose = "1.13.0"
 androidDesugar = "2.1.5"
-androidGradlePlugin = "9.0.0"
+androidGradlePlugin = "9.1.0"
 androidImageCropper = "96a06733f3"
 androidSupportTestVersion = "1.7.0"
 androidxArchVersion = "2.2.0"
-androidxCollection = "1.5.0"
-androidXCoreVersion = "1.17.0"
+androidxCollection = "1.6.0"
+androidXCoreVersion = "1.18.0"
 androidxSqlite = "2.6.2"
 # Stay away from version 1.2.0. It integrates with Android 13’s OnBackPressedInvoked in a way that is
 # close to impossible to control: https://github.com/material-components/material-components-android/issues/3968
@@ -17,10 +17,10 @@ androidxDrawer = "1.1.1"
 androidxTextExtJunit = "1.3.0"
 annotation = "1.9.1"
 appcompatVersion = "1.7.1"
-arrowCore = "2.2.1.1"
+arrowCore = "2.2.2.1"
 barista = "4.3.0"
-bouncycastle = "1.71"
-browser = "1.9.0"
+bouncycastle = "1.83"
+browser = "1.10.0"
 caldroid = "377d10a2a2"
 cardview = "1.0.0"
 commonsCollections4 = "4.5.0"
@@ -38,10 +38,10 @@ easypermissionsKtx = "7ab6997271"
 emailIntentBuilder = "2.0.0"
 espressoVersion = "3.7.0"
 evernote = "1.4.1"
-composeBom = "2026.01.01"
+composeBom = "2026.03.01"
 
-dagger = "2.59.1"
-datastorePreferences = "1.2.0"
+dagger = "2.59.2"
+datastorePreferences = "1.2.1"
 donut = "c11f2d1aeb"
 flexbox = "3.0.0"
 fontdrawable = "39e8f63ce2"
@@ -54,35 +54,35 @@ gson = "2.13.2"
 guava = "33.5.0-android"
 hbci4j = "657e81d30c"
 itextpdf = "5.5.13.3"
-jacksonCore = "2.21.0"
+jacksonCore = "2.21.2"
 jaxbImpl = "2.3.9"
 junitparams = "1.1.1"
 junitVersion = "4.13.2"
-kotlin = "2.3.10"
+kotlin = "2.3.20"
 kotlinxHtml = "0.12.0"
 kotlinxSerializationJson = "1.10.0"
-ksp = "2.3.5"
+ksp = "2.3.6"
 leakcanaryAndroid = "2.14"
 navigationCompose = "2.9.7"
 sealed-enum = "0.7.0"
-ktor = "3.4.0"
+ktor = "3.4.1"
 legacySupportV4 = "1.0.0"
 lifecycleExtensions = "2.2.0"
 lifecycleRuntimeKtx = "2.10.0"
 logbackAndroid = "3.0.0"
 materialComponents = "1.13.0"
 microsoftGraph = "5.80.0"
-mockitoKotlin = "6.2.3"
-mockitoVersion = "5.21.0"
+mockitoKotlin = "6.3.0"
+mockitoVersion = "5.23.0"
 mpandroidchart = "47240bb94c"
 msal = "5.1.0"
 okHttpVersion = "5.3.2"
 orchestrator = "1.6.1"
 pageindicatorview = "1.0.6"
-pagingCompose = "3.4.0"
+pagingCompose = "3.4.2"
 phrase = "1.2.0"
 picassoVersion = "2.8"
-playServicesAuth = "21.5.0"
+playServicesAuth = "21.5.1"
 playServicesMlkitTextRecognitionCommon = "19.1.0"
 recyclerview = "1.4.0"
 relinker = "1.4.5"
@@ -93,18 +93,19 @@ screengrab = "2.1.1"
 securityCrypto = "1.1.0"
 simpledialogfragments = "d1e6d27700"
 slf4jApi = "2.0.17"
-snakeyaml = "2.5"
+snakeyaml = "2.6"
 sqlcipher = "4.12.0"
-taptargetview = "1.15.0"
 tesseract4androidOpenmp = "4.8.0"
 mlkitTextRecognition = "16.0.1"
 mlkitTextRecognitionBundledCommon = "17.0.0"
 timberVersion = "5.0.1"
 truthVersion = "1.4.5"
 viewpager2 = "1.1.0"
-workManager = "2.11.1"
+workManager = "2.11.2"
 xercesimpl = "2.12.2"
 reorderable = "3.0.0"
+adaptiveNavigation = "1.2.0"
+material3AdaptiveNavigationSuite = "1.4.0"
 
 [libraries]
 accompanist-drawablepainter = { module = "com.google.accompanist:accompanist-drawablepainter", version.ref = "accompanist" }
@@ -122,6 +123,7 @@ androidx-browser = { module = "androidx.browser:browser", version.ref = "browser
 androidx-cardview = { module = "androidx.cardview:cardview", version.ref = "cardview" }
 androidx-collection = { module = "androidx.collection:collection", version.ref = "androidxCollection" }
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+androidx-compose-material3-window-size = { module = "androidx.compose.material3:material3-window-size-class" }
 androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "constraintlayout" }
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "documentfile" }
 androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigationCompose" }
@@ -242,7 +244,6 @@ screengrab = { module = "tools.fastlane:screengrab", version.ref = "screengrab" 
 simpledialogfragments = { module = "com.github.mtotschnig:SimpleDialogFragments", version.ref = "simpledialogfragments" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4jApi" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
-taptargetview = { module = "com.getkeepsafe.taptargetview:taptargetview", version.ref = "taptargetview" }
 tesseract4android-openmp = { module = "cz.adaptech.tesseract4android:tesseract4android-openmp", version.ref = "tesseract4androidOpenmp" }
 text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkitTextRecognition" }
 text-recognition-bundled-common = { module = "com.google.mlkit:text-recognition-bundled-common", version.ref = "mlkitTextRecognitionBundledCommon" }
@@ -255,6 +256,8 @@ truth = { module = "com.google.truth:truth", version.ref = "truthVersion" }
 ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 xercesimpl = { module = "xerces:xercesImpl", version.ref = "xercesimpl" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
+androidx-compose-adaptive-navigation = { group = "androidx.compose.material3.adaptive", name = "adaptive-navigation", version.ref = "adaptiveNavigation" }
+androidx-compose-material3-adaptive-navigation-suite = { group = "androidx.compose.material3", name = "material3-adaptive-navigation-suite", version.ref = "material3AdaptiveNavigationSuite" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
