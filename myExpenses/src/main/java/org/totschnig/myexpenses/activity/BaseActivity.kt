@@ -117,7 +117,6 @@ import org.totschnig.myexpenses.feature.values
 import org.totschnig.myexpenses.injector
 import org.totschnig.myexpenses.model.ContribFeature
 import org.totschnig.myexpenses.model.CurrencyContext
-import org.totschnig.myexpenses.model2.Account
 import org.totschnig.myexpenses.myApplication
 import org.totschnig.myexpenses.preference.PrefHandler
 import org.totschnig.myexpenses.preference.PrefKey
@@ -371,9 +370,6 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
     @Inject
     lateinit var prefHandler: PrefHandler
 
-    val collate: String
-        get() = prefHandler.collate
-
     @Inject
     lateinit var tracker: Tracker
 
@@ -497,7 +493,11 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
                                 onFeatureAvailable(it)
                             }
                         }
-                        ?: run { report(Throwable("No feature found for ${featureState.modules.joinToString()}")) }
+                        ?: run {
+                            //This should be an exceptional case, for example user has installed Dropbox # Jackson, then uninstalls Jackson.
+                            //when later we need to install Jackson again, we no longer know for which feature to call onFeatureAvailable
+                            report(Throwable("No feature found for ${featureState.modules.joinToString()}"))
+                        }
 
                 }
 
@@ -1410,7 +1410,7 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
         }
     }
 
-    fun maybeApplyDynamicColor(): Boolean = if (canUseContentColor) {
+    fun maybeApplyContentColor(): Boolean = if (canUseContentColor) {
         val intent = getIntent() // Get the current intent
         intent.putExtra(KEY_IS_MANUAL_RECREATE, true)
         recreate()
@@ -1418,7 +1418,11 @@ abstract class BaseActivity : AppCompatActivity(), MessageDialogFragment.Message
     } else false
 
     val canUseContentColor: Boolean by lazy {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) uiConfigIsSafe else false
+        when {
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU -> false
+            !prefHandler.getBoolean(PrefKey.CONTENT_BASED_COLORS, true) -> false
+            else -> uiConfigIsSafe
+        }
     }
 
     val uiConfigIsSafe: Boolean

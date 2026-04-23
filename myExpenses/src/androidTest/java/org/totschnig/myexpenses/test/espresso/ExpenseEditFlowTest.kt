@@ -1,6 +1,5 @@
 package org.totschnig.myexpenses.test.espresso
 
-import android.Manifest
 import android.content.Intent
 import android.provider.CalendarContract
 import androidx.test.espresso.Espresso.closeSoftKeyboard
@@ -58,9 +57,7 @@ class ExpenseEditFlowTest : BaseExpenseEditTest() {
     var methodId: Long = 0
 
     @get:Rule
-    var grantPermissionRule: GrantPermissionRule = GrantPermissionRule.grant(
-        Manifest.permission.WRITE_CALENDAR, Manifest.permission.READ_CALENDAR, Manifest.permission.POST_NOTIFICATIONS
-    )
+    var grantPermissionRule: GrantPermissionRule = buildGrantPermissionRule()
 
     @Before
     fun fixture() {
@@ -136,6 +133,7 @@ class ExpenseEditFlowTest : BaseExpenseEditTest() {
             putExtra(KEY_ACCOUNTID, account2.id)
         })
         checkAccount(ACCOUNT_LABEL_2)
+        closeSoftKeyboard()
         onView(withId(R.id.Category)).perform(click())
         pressBack()
         checkAccount(ACCOUNT_LABEL_2)

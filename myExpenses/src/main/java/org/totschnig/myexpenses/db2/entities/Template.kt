@@ -2,7 +2,6 @@ package org.totschnig.myexpenses.db2.entities
 
 import android.database.Cursor
 import org.totschnig.myexpenses.dialog.ConfirmationDialogFragment.Companion.KEY_ICON
-import org.totschnig.myexpenses.model.generateUuid
 import org.totschnig.myexpenses.provider.KEY_ACCOUNTID
 import org.totschnig.myexpenses.provider.KEY_AMOUNT
 import org.totschnig.myexpenses.provider.KEY_CATID
@@ -36,7 +35,7 @@ import org.totschnig.myexpenses.provider.getLong
 import org.totschnig.myexpenses.provider.getLongOrNull
 import org.totschnig.myexpenses.provider.getString
 import org.totschnig.myexpenses.provider.getStringOrNull
-import org.totschnig.myexpenses.util.TextUtils
+import org.totschnig.myexpenses.util.TextUtils.joinEnum
 
 /**
  * A standalone data class representing a record in the `templates` table.
@@ -101,7 +100,7 @@ data class Template(
     )
 
     companion object {
-        fun deriveFrom(transaction: Transaction, title: String) = with(transaction) {
+        fun deriveFrom(transaction: Transaction, title: String, uuid: String) = with(transaction) {
             Template(
                 title = title,
                 amount = amount,
@@ -118,7 +117,7 @@ data class Template(
                 currency = currency,
                 tagList = transaction.tagList,
                 debtId = debtId,
-                uuid = generateUuid()
+                uuid = uuid
             )
         }
         fun fromCursor(cursor: Cursor) = with(cursor) {
@@ -162,7 +161,7 @@ data class Template(
 
         companion object {
             @JvmField
-            val JOIN: String = TextUtils.joinEnum(Action::class.java)
+            val JOIN: String = joinEnum<Action>()
         }
     }
 }

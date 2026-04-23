@@ -1,10 +1,12 @@
 package org.totschnig.myexpenses.testutils
 
+import android.Manifest
 import android.app.Activity
 import android.content.ContentResolver
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.view.View
 import androidx.annotation.IdRes
 import androidx.appcompat.widget.MenuPopupWindow.MenuDropDownListView
@@ -16,7 +18,6 @@ import androidx.test.espresso.Espresso.onData
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.NoMatchingViewException
-import androidx.test.espresso.action.ViewActions
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.action.ViewActions.scrollTo
@@ -34,7 +35,9 @@ import androidx.test.espresso.matcher.ViewMatchers.isNotChecked
 import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withSpinnerText
+import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.platform.app.InstrumentationRegistry.getInstrumentation
+import androidx.test.rule.GrantPermissionRule
 import androidx.test.uiautomator.UiDevice
 import com.adevinta.android.barista.interaction.BaristaEditTextInteractions
 import com.adevinta.android.barista.interaction.BaristaScrollInteractions
@@ -67,6 +70,7 @@ import org.totschnig.myexpenses.model.AccountType
 import org.totschnig.myexpenses.model.ContribFeature
 import org.totschnig.myexpenses.model.CurrencyContext
 import org.totschnig.myexpenses.model.CurrencyUnit
+import org.totschnig.myexpenses.model.Money
 import org.totschnig.myexpenses.model.generateUuid
 import org.totschnig.myexpenses.model2.Account
 import org.totschnig.myexpenses.model2.Account.Companion.DEFAULT_COLOR
@@ -82,8 +86,10 @@ import org.totschnig.myexpenses.provider.SPLIT_CATID
 import org.totschnig.myexpenses.provider.TABLE_ACCOUNTS
 import org.totschnig.myexpenses.provider.TransactionProvider
 import org.totschnig.myexpenses.provider.TransactionProvider.TEMPLATES_URI
+import org.totschnig.myexpenses.util.ICurrencyFormatter
 import org.totschnig.myexpenses.util.distrib.DistributionHelper
 import org.totschnig.myexpenses.util.toEpoch
+import org.totschnig.myexpenses.viewmodel.data.compileDescription
 import org.totschnig.shared_test.CursorSubject.Companion.useAndAssert
 import org.totschnig.shared_test.TransactionData
 import org.totschnig.shared_test.assertTransaction
@@ -91,8 +97,8 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeoutException
-import org.totschnig.myexpenses.test.R as RT
 import com.google.android.material.R as RM
+import org.totschnig.myexpenses.test.R as RT
 
 abstract class BaseUiTest<A : ProtectedFragmentActivity> {
     private var isLarge = false
@@ -118,6 +124,9 @@ abstract class BaseUiTest<A : ProtectedFragmentActivity> {
     val currencyContext: CurrencyContext
         get() = app.appComponent.currencyContext()
 
+    val currencyFormatter: ICurrencyFormatter
+        get() = app.appComponent.currencyFormatter()
+
     protected val repository: Repository
         get() = app.appComponent.repository()
 
@@ -125,6 +134,17 @@ abstract class BaseUiTest<A : ProtectedFragmentActivity> {
         get() = prefHandler.defaultTransferCategory
 
     val homeCurrency: CurrencyUnit by lazy { currencyContext.homeCurrencyUnit }
+
+    fun buildGrantPermissionRule(): GrantPermissionRule = GrantPermissionRule.grant(
+        *buildList {
+            add(Manifest.permission.WRITE_CALENDAR)
+            add(Manifest.permission.READ_CALENDAR)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            add(Manifest.permission.CHANGE_CONFIGURATION)
+        }.toTypedArray()
+    )
 
     @JvmOverloads
     fun buildAccount(
@@ -250,14 +270,14 @@ abstract class BaseUiTest<A : ProtectedFragmentActivity> {
             if (DistributionHelper.isPlay) {
                 try {
                     //without play service a billing setup error dialog is displayed
-                    onView(ViewMatchers.withText(android.R.string.ok)).perform(click())
+                    onView(withText(android.R.string.ok)).perform(click())
                 } catch (_: Exception) {
                 }
             }
             onView(ViewMatchers.withSubstring(getString(R.string.dialog_title_contrib_feature))).check(
                 matches(isDisplayed())
             )
-            onView(ViewMatchers.withText(R.string.button_try)).perform(scrollTo(), click())
+            onView(withText(R.string.button_try)).perform(scrollTo(), click())
         }
     }
 
@@ -400,14 +420,21 @@ abstract class BaseUiTest<A : ProtectedFragmentActivity> {
 
     //select Time when MaterialTimePicker is open
     fun setTime(time: LocalTime, is24HourFormat: Boolean) {
-        try {
-            onView(
-                withId(RM.id.material_timepicker_mode_button)
-            ).inRoot(isDialog())
+        // Check if the clock face is visible
+        val isClockVisible = try {
+            onView(withId(RM.id.material_clock_face))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()))
+            true
+        } catch (_: Throwable) {
+            false
+        }
+
+        // If the clock is visible, we click the toggle button to switch to text input mode
+        if (isClockVisible) {
+            onView(withId(RM.id.material_timepicker_mode_button))
+                .inRoot(isDialog())
                 .perform(click())
-        } catch (_: NoMatchingViewException) {
-            // This exception is expected and okay. It means we are already in text input mode.
-            // We can ignore it and proceed.
         }
 
         onView(
@@ -541,6 +568,22 @@ abstract class BaseUiTest<A : ProtectedFragmentActivity> {
             } else {
                 assertThat(template.data.planId).isGreaterThan(0)
             }
+            assertThat(template.plan!!.title).isEqualTo(templateTitle)
+            assertThat(template.plan.description).isEqualTo(
+                compileDescription(
+                    targetContext,
+                    currencyFormatter,
+                    Money(currencyContext.homeCurrencyUnit, expectedAmount),
+                    expectedCategory,
+                    template.data.categoryPath,
+                    false,
+                    null,
+                    template.data.payeeName,
+                    expectedMethod,
+                    template.data.methodLabel,
+                    template.data.uuid
+                )
+            )
 
         } else {
             assertThat(template.data.planId).isNull()

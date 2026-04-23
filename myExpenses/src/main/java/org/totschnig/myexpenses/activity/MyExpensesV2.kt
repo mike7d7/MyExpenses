@@ -1,5 +1,6 @@
 package org.totschnig.myexpenses.activity
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -18,9 +19,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.dimensionResource
@@ -43,11 +46,7 @@ import org.totschnig.myexpenses.dialog.SortSelect
 import org.totschnig.myexpenses.dialog.SortUtilityDialogFragment
 import org.totschnig.myexpenses.injector
 import org.totschnig.myexpenses.model.ContribFeature
-import org.totschnig.myexpenses.model.sort.Sort
-import org.totschnig.myexpenses.preference.PrefKey
-import org.totschnig.myexpenses.preference.enumValueOrDefault
 import org.totschnig.myexpenses.provider.KEY_SORT_KEY
-import org.totschnig.myexpenses.provider.triggerAccountListRefresh
 import org.totschnig.myexpenses.util.ads.AdHandlerV2
 import org.totschnig.myexpenses.util.crashreporting.CrashHandler.Companion.report
 import org.totschnig.myexpenses.viewmodel.MyExpensesV2ViewModel
@@ -100,12 +99,15 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>(),
     }
 
     override fun onEditTransactionResult() {
-        if (shouldShowAds) {
-            if (!adHandler.onEditTransactionResult(this)) {
-                //TODO
-                //reviewManager.onEditTransactionResult(this)
-            }
+        val adHandled = shouldShowAds && adHandler.onEditTransactionResult(this)
+
+        if (!adHandled) {
+            reviewManager.onEditTransactionResult(this)
         }
+    }
+
+    override fun injectDependencies() {
+        injector.inject(this)
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -186,9 +188,10 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>(),
                                 }
                             }
                         }
-                        val accounts = result.getOrThrow()
+                        val accounts = result.getOrThrow().withNaturalSort
                         val banks = viewModel.banks.collectAsState()
                         val showSortDialog = rememberSaveable { mutableStateOf(false) }
+                        var isNavigationVisible by rememberSaveable { mutableStateOf(false) }
 
                         MainScreenAdaptive(
                             viewModel,
@@ -241,6 +244,8 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>(),
                                         AppEvent.Sort -> showSortDialog.value = true
 
                                         is AppEvent.CopyToClipBoard -> copyToClipboard(event.text)
+                                        AppEvent.ToggleNavigation -> isNavigationVisible =
+                                            !isNavigationVisible
                                     }
                                 }
                             },
@@ -272,8 +277,8 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>(),
                             onPrepareContextMenuItem = ::isContextMenuItemVisible,
                             onPrepareMenuItem = { itemId -> currentAccount.isMenuItemVisible(itemId) },
                             flags = viewModel.accountFlags.collectAsState(emptyList()).value,
-                            adView = {
-                                adHandler.Banner()
+                            adView = { isLoadedState ->
+                                adHandler.Banner(isLoadedState)
                             },
                             bankIcon = { modifier, id ->
                                 banks.value.find { it.id == id }
@@ -283,7 +288,8 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>(),
                                             bank
                                         )
                                     }
-                            }
+                            },
+                            isNavigationVisible = isNavigationVisible
                         ) { pageAccount, isCurrent ->
                             Page(
                                 pageAccount,
@@ -302,27 +308,18 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>(),
                             }
 
                             val selectedSort = rememberSaveable {
-                                mutableStateOf(
-                                    prefHandler.enumValueOrDefault(
-                                        PrefKey.SORT_ORDER_ACCOUNTS,
-                                        Sort.USAGES
-                                    )
-                                )
+                                mutableStateOf(viewModel.sortOrderAccounts)
                             }
                             val scope = rememberCoroutineScope()
                             AlertDialog(
                                 onDismissRequest = { showSortDialog.value = false },
                                 confirmButton = {
                                     Button(onClick = {
-                                        scope.launch {
-                                            prefHandler.putString(
-                                                PrefKey.SORT_ORDER_ACCOUNTS,
-                                                selectedSort.value.name
-                                            )
-                                            viewModel.sortByFlagFirst.set(sortByFlagFirst.value)
-                                            contentResolver.triggerAccountListRefresh()
-                                            showSortDialog.value = false
-                                        }
+                                        viewModel.setSortOrderAccounts(
+                                            selectedSort.value,
+                                            sortByFlagFirst.value
+                                        )
+                                        showSortDialog.value = false
                                     }) {
                                         Text(stringResource(id = android.R.string.ok))
                                     }
@@ -359,5 +356,13 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>(),
 
     override fun onSortOrderConfirmed(sortedIds: LongArray) {
         viewModel.sortAccounts(sortedIds)
+    }
+
+    //Short circuit calls we receive from BaseMyExpenses, can be removed, once V1 is abandoned
+    override fun invalidateOptionsMenu() {}
+
+    override fun handleIntent(intent: Intent) {
+        viewModel.handleIntent(intent)
+        showTransactionFromIntent(intent)
     }
 }

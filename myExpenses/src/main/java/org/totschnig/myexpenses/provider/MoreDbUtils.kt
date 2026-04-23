@@ -39,32 +39,42 @@ import org.totschnig.myexpenses.sync.json.TransactionChange
 import org.totschnig.myexpenses.util.ColorUtils
 import org.totschnig.myexpenses.util.PermissionHelper.PermissionGroup
 import org.totschnig.myexpenses.util.Utils
-import org.totschnig.myexpenses.util.calculateRealExchangeRate
 import org.totschnig.myexpenses.util.crashreporting.CrashHandler
 import org.totschnig.myexpenses.viewmodel.data.Category
 import timber.log.Timber
 import java.io.File
-import kotlin.IllegalStateException
 
-fun <T> SupportSQLiteDatabase.safeUpdateWithSealed(runnable: () -> T): T {
+fun <T> SupportSQLiteDatabase.safeUpdateWithSealed(
+    protectAccounts: Boolean = true,
+    protectDebts: Boolean = true,
+    runnable: () -> T
+): T {
     beginTransaction()
     try {
-        ContentValues(1).apply {
-            put(KEY_SEALED, -1)
-            update(TABLE_ACCOUNTS, this, "$KEY_SEALED= ?", arrayOf("1"))
+        if (protectAccounts) {
+            ContentValues(1).apply {
+                put(KEY_SEALED, -1)
+                update(TABLE_ACCOUNTS, this, "$KEY_SEALED= ?", arrayOf("1"))
+            }
         }
-        ContentValues(1).apply {
-            put(KEY_SEALED, -1)
-            update(TABLE_DEBTS, this, "$KEY_SEALED= ?", arrayOf("1"))
+        if (protectDebts) {
+            ContentValues(1).apply {
+                put(KEY_SEALED, -1)
+                update(TABLE_DEBTS, this, "$KEY_SEALED= ?", arrayOf("1"))
+            }
         }
         val result = runnable()
-        ContentValues(1).apply {
-            put(KEY_SEALED, 1)
-            update(TABLE_ACCOUNTS, this, "$KEY_SEALED= ?", arrayOf("-1"))
+        if (protectAccounts) {
+            ContentValues(1).apply {
+                put(KEY_SEALED, 1)
+                update(TABLE_ACCOUNTS, this, "$KEY_SEALED= ?", arrayOf("-1"))
+            }
         }
-        ContentValues(1).apply {
-            put(KEY_SEALED, 1)
-            update(TABLE_DEBTS, this, "$KEY_SEALED= ?", arrayOf("-1"))
+        if (protectDebts) {
+            ContentValues(1).apply {
+                put(KEY_SEALED, 1)
+                update(TABLE_DEBTS, this, "$KEY_SEALED= ?", arrayOf("-1"))
+            }
         }
         setTransactionSuccessful()
         return result
@@ -571,13 +581,14 @@ fun cacheEventData(context: Context, prefHandler: PrefHandler) {
     }
 }
 
+@JvmOverloads
 fun SupportSQLiteDatabase.update(
     table: String,
     values: ContentValues,
     whereClause: String?,
     whereArgs: Array<Any>?,
-) = //https://github.com/sqlcipher/sqlcipher-android/issues/50
-    update(table, SQLiteDatabase.CONFLICT_NONE, values, whereClause, whereArgs ?: emptyArray())
+    conflictAlgorithm: Int = SQLiteDatabase.CONFLICT_NONE
+) = update(table, conflictAlgorithm, values, whereClause, whereArgs)
 
 fun SupportSQLiteDatabase.insert(table: String, values: ContentValues): Long =
     insert(table, SQLiteDatabase.CONFLICT_NONE, values)

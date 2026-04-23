@@ -34,6 +34,7 @@ import org.totschnig.myexpenses.db2.createPlan
 import org.totschnig.myexpenses.db2.createTemplate
 import org.totschnig.myexpenses.db2.createTransaction
 import org.totschnig.myexpenses.db2.deleteAttachments
+import org.totschnig.myexpenses.db2.entities.Plan
 import org.totschnig.myexpenses.db2.entities.Recurrence
 import org.totschnig.myexpenses.db2.entities.Template
 import org.totschnig.myexpenses.db2.getCategoryPath
@@ -48,6 +49,7 @@ import org.totschnig.myexpenses.db2.loadTransaction
 import org.totschnig.myexpenses.db2.requireParty
 import org.totschnig.myexpenses.db2.savePrice
 import org.totschnig.myexpenses.db2.updateNewPlanEnabled
+import org.totschnig.myexpenses.db2.updatePlan
 import org.totschnig.myexpenses.db2.updateTemplate
 import org.totschnig.myexpenses.db2.updateTransaction
 import org.totschnig.myexpenses.exception.UnknownPictureSaveException
@@ -109,6 +111,7 @@ import org.totschnig.myexpenses.util.io.FileCopyUtils
 import org.totschnig.myexpenses.util.io.getFileExtension
 import org.totschnig.myexpenses.util.io.getNameWithoutExtension
 import org.totschnig.myexpenses.viewmodel.data.Account
+import org.totschnig.myexpenses.viewmodel.data.InitialPlanData
 import org.totschnig.myexpenses.viewmodel.data.PaymentMethod
 import org.totschnig.myexpenses.viewmodel.data.PlanLoadedData
 import org.totschnig.myexpenses.viewmodel.data.TemplateEditData
@@ -201,16 +204,19 @@ class TransactionEditViewModel(application: Application, savedStateHandle: Saved
         )
     }
 
-    private fun TransactionEditData.maybeCreateInitialPlan() = initialPlan?.let {
+    private fun maybeCreateInitialPlan(
+        transaction: TransactionEditData,
+        initialPlan: InitialPlanData,
+    ): Pair<String, Plan?> {
         val title = initialPlan.title
-            ?: party?.name
-            ?: categoryPath?.takeIf { it.isNotEmpty() }
-            ?: comment?.takeIf { it.isNotEmpty() }
+            ?: transaction.party?.name
+            ?: transaction.categoryPath?.takeIf { it.isNotEmpty() }
+            ?: transaction.comment?.takeIf { it.isNotEmpty() }
             ?: localizedContext.getString(R.string.menu_create_template)
         //noinspection MissingPermission
-        title to if (initialPlan.recurrence != Recurrence.NONE) repository.createPlan(
+        return title to if (initialPlan.recurrence != Recurrence.NONE) repository.createPlan(
             title,
-            compileDescription(application, currencyFormatter),
+            transaction.compileDescription(application, currencyFormatter, initialPlan.uuid),
             initialPlan.date,
             initialPlan.recurrence
         ) else null
@@ -229,25 +235,37 @@ class TransactionEditViewModel(application: Application, savedStateHandle: Saved
                 }
             )
             val result = if (transaction.isTemplate) {
-                val planId = transaction.maybeCreateInitialPlan()?.second?.id
+                val initialPlanId = transaction.initialPlan?.let {
+                    maybeCreateInitialPlan(
+                        transaction,
+                        it
+                    ).second?.id
+                }
                 val template = TransactionMapper.mapTemplate(transaction).let {
-                    if (planId != null) it.copy(data = it.data.copy(planId = planId)) else it
+                    if (initialPlanId != null) it.copy(data = it.data.copy(planId = initialPlanId)) else it
                 }
                 val id = if (transaction.id == 0L) {
                     val id = repository.createTemplate(template).id
                     repository.updateNewPlanEnabled(licenceHandler)
-                    if (planId != null) {
+                    if (initialPlanId != null) {
                         PlanExecutor.enqueueSelf(application, prefHandler, forceImmediate = true)
                     }
                     id
                 } else {
                     repository.updateTemplate(template)
+                    if (transaction.planId != null) {
+                        repository.updatePlan(
+                            transaction.planId,
+                            template.title,
+                            transaction.compileDescription(application, currencyFormatter)
+                        )
+                    }
                     transaction.id
                 }
                 TransactionEditResult(
                     id = id,
                     amount = template.data.amount,
-                    planId = planId
+                    initialPlanId = initialPlanId
                 )
             } else {
                 val repositoryTransaction = TransactionMapper.mapTransaction(transaction)
@@ -257,24 +275,27 @@ class TransactionEditViewModel(application: Application, savedStateHandle: Saved
                     repository.updateTransaction(repositoryTransaction)
                     repositoryTransaction
                 }
-                val planId = transaction.maybeCreateInitialPlan()?.also { (title, plan) ->
-                    val template = repository.createTemplate(
-                        RepositoryTemplate.fromTransaction(
-                            repositoryTransaction,
-                            title
-                        ).let {
-                            if (plan?.id != null) it.copy(data = it.data.copy(planId = plan.id)) else it
-                        }
-                    )
-                    if (plan != null) {
-                        repository.linkTemplateWithTransaction(
-                            template.id,
-                            saved.id,
-                            CalendarProviderProxy.calculateId(plan.dtStart)
+                val initialPlanId = transaction.initialPlan
+                    ?.let { maybeCreateInitialPlan(transaction, it) }
+                    ?.also { (title, plan) ->
+                        val template = repository.createTemplate(
+                            RepositoryTemplate.fromTransaction(
+                                repositoryTransaction,
+                                title,
+                                transaction.initialPlan.uuid
+                            ).let {
+                                if (plan?.id != null) it.copy(data = it.data.copy(planId = plan.id)) else it
+                            }
                         )
-                    }
-                    repository.updateNewPlanEnabled(licenceHandler)
-                }?.second?.id
+                        if (plan != null) {
+                            repository.linkTemplateWithTransaction(
+                                template.id,
+                                saved.id,
+                                CalendarProviderProxy.calculateId(plan.dtStart)
+                            )
+                        }
+                        repository.updateNewPlanEnabled(licenceHandler)
+                    }?.second?.id
                 if (transaction.planInstanceId != null && transaction.originTemplate != null) {
                     repository.linkTemplateWithTransaction(
                         transaction.originTemplate.templateId,
@@ -287,7 +308,7 @@ class TransactionEditViewModel(application: Application, savedStateHandle: Saved
                     amount = repositoryTransaction.data.amount,
                     transferPeer = saved.transferPeer?.id,
                     transferAmount = repositoryTransaction.transferPeer?.amount,
-                    planId = planId
+                    initialPlanId = initialPlanId
                 )
             }
             //Attachments
@@ -327,15 +348,17 @@ class TransactionEditViewModel(application: Application, savedStateHandle: Saved
             }
             val date = transaction.date.toLocalDate()
             if (date <= LocalDate.now()) {
-                userSetExchangeRate?.let {
-                    repository.savePrice(
-                        currencyContext.homeCurrencyUnit,
-                        transaction.amount.currencyUnit,
-                        date,
-                        ExchangeRateSource.User,
-                        it
-                    )
-                }
+                userSetExchangeRate
+                    ?.takeIf { it > BigDecimal.ZERO }
+                    ?.let {
+                        repository.savePrice(
+                            currencyContext.homeCurrencyUnit,
+                            transaction.amount.currencyUnit,
+                            date,
+                            ExchangeRateSource.User,
+                            it
+                        )
+                    }
             }
             result
         }

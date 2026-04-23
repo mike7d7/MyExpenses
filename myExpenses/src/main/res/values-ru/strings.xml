@@ -770,7 +770,6 @@
     <string name="confirmation_load_template_discard_data">Существующие данные формы будут удалены.</string>
     <string name="warning_balance_account_delete">Если вы продолжите, все согласованные операции этого счета будут удалены из базы данных, и вы не сможете их восстановить.</string>
     <string name="advance_exexcution_in_days">Досрочное исполнение (в днях)</string>
-    <string name="discover_feature_fab_long_press">Нажмите и удерживайте плавающую кнопку действия, чтобы напрямую открыть форму для переводов, разделения транзакций или дохода.</string>
     <string name="select_package">Пожалуйста, выберите пакет лицензий.</string>
     <string name="scan_result_no_payee">Получатель платежа не найден</string>
     <string name="scan_result_no_date">Дата не найдена</string>
@@ -1050,5 +1049,14 @@
     <string name="content_description_select_recent_file">Выбрать из недавних файлов</string>
     <string name="menu_templates">Шаблоны</string>
     <string name="pref_ui_start_screen_title">Начальный экран</string>
-    <string name="pref_ui_start_screen_last_visited">Последний посещённый</string>
+    <string name="pref_ui_start_screen_last_visited">Последний просмотренный экран</string>
+    <string name="content_description_show_balance_details">Показать подробную информацию</string>
+    <string name="main_navigation">Основная навигация</string>
+    <string name="pref_fab_style_title">Стиль плавающей кнопки действия</string>
+    <string name="pref_fab_style_standard_description">Стандартный (Нажмите на стрелку для вызова меню)</string>
+    <string name="pref_fab_style_compact_description">Компактный (Нажмите и удерживайте для вызова меню)</string>
+    <string name="number_too_large">Число слишком велико</string>
+    <string name="prioritize_flag_order">Приоритет порядка флагов</string>
+    <string name="pref_content_based_colors_title">Динамический цвет на основе цвета счета</string>
+    <string name="pref_content_based_colors_summary">Определение цветов темы на основе цвета текущего счета. Отключите, если текст становится трудночитаемым.</string>
 </resources>

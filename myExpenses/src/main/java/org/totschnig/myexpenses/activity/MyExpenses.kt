@@ -85,6 +85,7 @@ import org.totschnig.myexpenses.model.ContribFeature
 import org.totschnig.myexpenses.model.Money
 import org.totschnig.myexpenses.preference.PrefKey
 import org.totschnig.myexpenses.provider.KEY_DATE
+import org.totschnig.myexpenses.provider.KEY_ROWID
 import org.totschnig.myexpenses.retrofit.Vote
 import org.totschnig.myexpenses.ui.IDiscoveryHelper
 import org.totschnig.myexpenses.util.TextUtils
@@ -95,7 +96,6 @@ import org.totschnig.myexpenses.util.checkMenuIcon
 import org.totschnig.myexpenses.util.configureSortDirectionMenu
 import org.totschnig.myexpenses.util.crashreporting.CrashHandler.Companion.report
 import org.totschnig.myexpenses.util.distrib.DistributionHelper.isGithub
-import org.totschnig.myexpenses.util.distrib.ReviewManager
 import org.totschnig.myexpenses.util.formatMoney
 import org.totschnig.myexpenses.util.getSortDirectionFromMenuItemId
 import org.totschnig.myexpenses.util.setEnabledAndVisible
@@ -124,7 +124,7 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
     override val fabActionName = "CREATE_TRANSACTION"
 
     private val accountData: List<FullAccount>
-        get() = viewModel.accountData.value?.getOrNull() ?: emptyList()
+        get() = viewModel.accountData.value?.getOrNull()?.withNaturalSort ?: emptyList()
 
     override suspend fun accountForNewTransaction() = currentAccount?.let { current ->
             current.takeIf { !it.isAggregate } ?: viewModel.accountData.value?.getOrNull()
@@ -145,9 +145,6 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
 
     @Inject
     lateinit var discoveryHelper: IDiscoveryHelper
-
-    @Inject
-    lateinit var reviewManager: ReviewManager
 
     @Inject
     lateinit var modelClass: Class<out MyExpensesViewModel>
@@ -244,16 +241,6 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
 
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
-        if (savedInstanceState == null) {
-            floatingActionButton.let {
-                discoveryHelper.discover(
-                    this,
-                    it,
-                    3,
-                    IDiscoveryHelper.Feature.FabLongPress
-                )
-            }
-        }
         // Sync the toggle state after onRestoreInstanceState has occurred.
         drawerToggle?.syncState()
     }
@@ -279,9 +266,9 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
     }
 
     protected open fun handleSortDirection(item: MenuItem) =
-        getSortDirectionFromMenuItemId(item.itemId)?.let { (sort, direction) ->
+        getSortDirectionFromMenuItemId(item.itemId)?.let {
             if (!item.isChecked) {
-                viewModel.persistSort(sort, direction)
+                viewModel.persistSort(it)
             }
             true
         } == true
@@ -846,7 +833,6 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
 
     fun setupFabSubMenu() {
         floatingActionButton.setOnLongClickListener { fab ->
-            discoveryHelper.markDiscovered(IDiscoveryHelper.Feature.FabLongPress)
             val popup = PopupMenu(this, fab)
             val popupMenu = popup.menu
             popup.setOnMenuItemClickListener { item ->
@@ -1285,6 +1271,12 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
     override fun onPause() {
         adHandler.onPause()
         super.onPause()
+    }
+
+    override fun handleIntent(intent: Intent) {
+        intent.extras?.getLong(KEY_ROWID, 0)?.let {
+            selectedAccountId = it
+        }
     }
 
     companion object {

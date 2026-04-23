@@ -377,7 +377,6 @@
     <string name="roadmap_vote">Glas u planu razvoja</string>
     <string name="contrib_feature_roadmap_voting_label">Pravo glasanja u <b>planiranju razvoja</b></string>
     <string name="contrib_feature_distribution_label">Kružni dijagram (distribucija po kategorijama)</string>
-    <string name="discover_feature_fab_long_press">Dodirni i drži plutajući gumb radnje pritisnutim za izravno otvaranje obrasca za prijenose, višedjelne transakcije ili prihod.</string>
     <string name="currency_code_already_definded">Valuta je već definirana.</string>
     <string name="ungroup_split_transaction_success">Višedjelna transakcija je uspješno razgrupirana.</string>
     <plurals name="dialog_title_warning_delete_account">
@@ -997,6 +996,11 @@
     <string name="content_description_select_recent_file">Odaberi iz nedavnih datoteka</string>
     <string name="content_description_show_balance_details">Prikaži detaljne informacije</string>
     <string name="menu_templates">Predlošci</string>
-    <string name="pref_ui_start_screen_title">Početni zaslon</string>
-    <string name="pref_ui_start_screen_last_visited">Zadnji posjećeni</string>
+    <string name="pref_ui_start_screen_title">Početni ekran</string>
+    <string name="pref_ui_start_screen_last_visited">Zadnje posjećeno</string>
+    <string name="main_navigation">Glavna navigacija</string>
+    <string name="pref_fab_style_title">Stil plutajućeg gumba za radnju</string>
+    <string name="pref_fab_style_standard_description">Standardno (Dodirni strelicu za otvaranje izbornika)</string>
+    <string name="pref_fab_style_compact_description">Kompaktno (Dodirni i zadrži dodirnuto za otvaranje izbornika)</string>
+    <string name="number_too_large">Broj je prevelik</string>
 </resources>

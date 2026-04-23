@@ -317,7 +317,7 @@
     <string name="split_transaction">Opération ventilée</string>
     <string name="status">État</string>
     <string name="status_cleared">pointée</string>
-    <string name="status_reconciled">rapproché</string>
+    <string name="status_reconciled">rapprochée</string>
     <string name="status_unreconciled">non-rapprochée</string>
     <string name="status_void">invalide</string>
     <string name="subcategory">Sous-catégorie</string>
@@ -590,8 +590,8 @@
     <string name="warning_ungroup_split_transactions">Les opérations ventilées sélectionnées seront dissociées, c\'est-à-dire que leurs parties après division deviendront des opérations normales.</string>
     <!-- This is the label for the action that breaks up a split transaction into its parts. -->
     <string name="menu_ungroup_split_transaction">Dissocier la ventilation</string>
-    <string name="ungroup_split_transaction_success">La transaction partagée a été dissociée avec succès.</string>
-    <string name="split_transaction_one_success">L\'opération ventilée a été dissociée avec succès.</string>
+    <string name="ungroup_split_transaction_success">L\'opération ventilée a été dissociée avec succès.</string>
+    <string name="split_transaction_one_success">L\'opération a été transformée en opération ventilée avec succès.</string>
     <string name="split_transaction_group_success">%1$d opérations ont été regroupées avec succès en une seule opération ventilée.</string>
     <string name="split_transaction_not_possible">Seules les opérations ayant le même compte, le même bénéficiaire et le même statut peuvent être regroupées en une seule opération ventilée.</string>
     <string name="pref_transaction_time_summary">Permet de définir l\'heure exacte de l\'opération.</string>
@@ -769,8 +769,6 @@
     <string name="pref_feature_uninstall_summary">Play Store essaie finalement de supprimer ces modules en arrière-plan.</string>
     <!-- Toast message shown if user clicks on Upgrade button before having selected a licence -->
     <string name="select_package">Veuillez sélectionner un package de licence.</string>
-    <!-- This message is shwon when we highlight the floating action button and educate user about the menu that shows upon long press (tap and hold)  -->
-    <string name="discover_feature_fab_long_press">Appuyez et maintenez le bouton d\'action flottant afin d\'ouvrir directement le formulaire pour les transferts, les transactions ventilées ou le revenu.</string>
     <!-- Label for a slider control that allows to configure a plan to be executed (added to the ledger) the give number of days in advance -->
     <string name="advance_exexcution_in_days">Exécution anticipée (en jours)</string>
     <string name="warning_balance_account_delete">Si vous continuez, toutes les opérations rapprochées de ce compte seront supprimées de la base de données et vous ne pourrez pas les restaurer.</string>
@@ -1066,4 +1064,11 @@
     <string name="pref_ui_start_screen_title">Écran de démarrage</string>
     <string name="pref_ui_start_screen_last_visited">Dernier consulté</string>
     <string name="main_navigation">Navigation principale</string>
+    <string name="pref_fab_style_title">Style de bouton d’action flottant</string>
+    <string name="pref_fab_style_standard_description">Standard (Appuyez sur la flèche pour le menu)</string>
+    <string name="pref_fab_style_compact_description">Compact (Appuyez et maintenez pour le menu)</string>
+    <string name="number_too_large">Nombre trop grand</string>
+    <string name="prioritize_flag_order">Prioriser l’ordre des marqueurs</string>
+    <string name="pref_content_based_colors_title">Couleur dynamique basée sur les comptes</string>
+    <string name="pref_content_based_colors_summary">Dérivez les couleurs du thème à partir de la couleur du compte courant. Désactivez si le texte est difficile à lire.</string>
 </resources>

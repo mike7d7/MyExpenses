@@ -2,6 +2,7 @@ package org.totschnig.myexpenses.dialog
 
 import android.content.Context
 import android.os.Parcelable
+import android.view.View.LAYOUT_DIRECTION_RTL
 import androidx.annotation.DrawableRes
 import androidx.annotation.IdRes
 import androidx.annotation.MenuRes
@@ -12,7 +13,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.livefront.sealedenum.GenSealedEnum
 import kotlinx.parcelize.Parcelize
 import org.totschnig.myexpenses.R
@@ -202,6 +206,50 @@ sealed class MenuItem(
                 V2Navigation -> PrefKey.CUSTOMIZE_MENU_V2_MAIN
                 V2Transactions -> PrefKey.CUSTOMIZE_MENU_V2_TRANSACTIONS
             }
+
+        fun title(context: Context) = when (this) {
+            V1 -> "V1"
+            V2Navigation -> context.getString(R.string.main_navigation)
+            V2Transactions -> context.getString(R.string.import_select_transactions)
+        }
+    }
+
+    enum class NavigationMode {
+        DEFAULT,   // = Fixed_bottom on phone, Always rail on tablet
+        FIXED_BOTTOM,     // Traditional
+        TOGGLEABLE_RAIL,   // Data-first / Maximize vertical space
+        ALWAYS_RAIL,      // Consistent sidebar
+        ADAPTIVE;    // Rail in Landscape, BottomBar in Portrait
+
+        val label: String
+            @Composable get() = when (this) {
+                DEFAULT -> ""
+                FIXED_BOTTOM -> stringResource(R.string.bottom)
+                TOGGLEABLE_RAIL, ALWAYS_RAIL -> railPosition()
+                ADAPTIVE -> railPosition() +
+                        " (" + stringResource(R.string.landscape) + "), " +
+                        stringResource(R.string.bottom) +
+                        " (" + stringResource(R.string.portrait) + ")"
+            }
+
+        @Composable
+        private fun railPosition() =
+            stringResource(
+                if (LocalConfiguration.current.layoutDirection == LAYOUT_DIRECTION_RTL)
+                    R.string.right else R.string.left
+            )
+
+        fun validate(isTablet: Boolean) = if (isTablet) {
+            if (forTablet.contains(this)) this else ALWAYS_RAIL
+        } else {
+            if (forPhone.contains(this)) this else FIXED_BOTTOM
+        }
+
+        companion object {
+            val PREFERENCE_KEY = stringPreferencesKey("navigationMode")
+            val forPhone = listOf(FIXED_BOTTOM, TOGGLEABLE_RAIL)
+            val forTablet = listOf(ALWAYS_RAIL, ADAPTIVE)
+        }
     }
 
     @GenSealedEnum
@@ -258,6 +306,5 @@ sealed class MenuItem(
 
         fun getDefaultConfiguration(menuContext: MenuContext): List<MenuItem> =
             all(menuContext).filter { it.isEnabledByDefault }
-
     }
 }

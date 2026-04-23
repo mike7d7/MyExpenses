@@ -854,7 +854,7 @@
     <string name="select_all_list_too_large">Perintah %s tidak tersedia kerana hanya sebahagian senarai dimuatkan. Sila gunakan fungsi Carian untuk mengurangkan saiz senarai.</string>
     <string name="pref_copy_attachments_summary_off">Fail tidak disalin, hanya rujukan disimpan.</string>
     <string name="pref_feature_uninstall_summary">Gedung Play cuba untuk akhirnya mengalih keluar modul tersebut di latar belakang.</string>
-    <string name="github_sponsors">Kunci lesen juga diberikan kepada &lt;a href=%s&gt;Penaja Github&lt;/a&gt;.</string>
+    <string name="github_sponsors"><![CDATA[Kunci lesen juga diberikan kepada <a href=%s>Penaja Github</a>.]]></string>
     <string name="roadmap_intro">Undian Pelan Hala Tuju 2024 kini dibuka! Undi untuk ciri dan penambahbaikan yang paling penting kepada anda.</string>
     <string name="subcategories_merged_recursively">Jika mana-mana kategori yang digabungkan mempunyai subkategori dengan label yang sama, kategori tersebut akan digabungkan terlebih dahulu, secara rekursif.</string>
     <string name="notifications_permission_required_auto_backup">Dengan memberikan kebenaran untuk menghantar pemberitahuan, anda akan dimaklumkan tentang auto-sandar.</string>
@@ -863,7 +863,6 @@
         <item quantity="other">Tag %1$s dipetakan pada transaksi %2$d . Patutkah ia dipadamkan?</item>
     </plurals>
     <string name="sub_budget_exceeded_error_1_2">Semua jumlah yang diperuntukkan kepada kategori utama telah diperuntukkan kepada subkategori lain.</string>
-    <string name="discover_feature_fab_long_press" tools:ignore="UnusedResources">Ketik dan tahan butang tindakan terapung untuk membuka terus borang untuk pemindahan, transaksi berpecah atau pendapatan.</string>
     <string name="warning_unencrypted_backup">Walaupun data anda dilindungi daripada akses tanpa kebenaran pada peranti ini, sandaran dibuat tanpa penyulitan, melainkan anda mengkonfigurasi %s.</string>
     <string name="pref_purge_backup_keep_title">Bilangan maksimum fail sandaran terbaharu untuk disimpan</string>
     <string name="pref_csv_export_split_categories_summary">Gunakan lajur berasingan untuk setiap peringkat hierarki kategori</string>

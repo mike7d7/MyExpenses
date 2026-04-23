@@ -2,6 +2,7 @@ package org.totschnig.myexpenses.dialog
 
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -11,10 +12,15 @@ import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,7 +30,6 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -40,13 +45,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.totschnig.myexpenses.R
 import org.totschnig.myexpenses.compose.ButtonRow
+import org.totschnig.myexpenses.compose.isTablet
 import org.totschnig.myexpenses.compose.optional
 import org.totschnig.myexpenses.compose.rememberMutableStateListOf
 import org.totschnig.myexpenses.compose.scrollbar.LazyColumnWithScrollbar
 import org.totschnig.myexpenses.dialog.MenuItem.MenuContext.V1
+import org.totschnig.myexpenses.preference.EnumPreferenceAccessor
 import org.totschnig.myexpenses.preference.menu
 import org.totschnig.myexpenses.preference.persistMenu
-import org.totschnig.myexpenses.util.TextUtils
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -58,12 +64,7 @@ class CustomizeMenuDialogFragment : ComposeBaseDialogFragment3() {
     override val fullScreenIfNotLarge = true
 
     override val title: CharSequence
-        get() = TextUtils.concatResStrings(
-            requireContext(),
-            " : ",
-            R.string.menu,
-            R.string.customize
-        )
+        get() = getString(R.string.menu) + " : " + menuContext.title(requireContext())
 
     suspend fun loadConfiguration(menuContext: MenuItem.MenuContext): List<MenuItem> {
         return when (menuContext) {
@@ -79,6 +80,7 @@ class CustomizeMenuDialogFragment : ComposeBaseDialogFragment3() {
                 menuContext.prefKey,
                 LinkedHashSet(data.map { it.name })
             )
+
             else -> dataStore.persistMenu(
                 prefHandler.getStringPreferencesKey(menuContext.prefKey),
                 data
@@ -86,11 +88,21 @@ class CustomizeMenuDialogFragment : ComposeBaseDialogFragment3() {
         }
     }
 
-    @Composable
-    override fun ColumnScope.MainContent() {
-        val menuContext = arguments?.let {
+    val navigationModeAccessor by lazy {
+        EnumPreferenceAccessor<MenuItem.NavigationMode>(
+            dataStore,
+            MenuItem.NavigationMode.PREFERENCE_KEY,
+            MenuItem.NavigationMode.DEFAULT
+        )
+    }
+
+    val menuContext: MenuItem.MenuContext
+        get() = arguments?.let {
             BundleCompat.getSerializable(it, KEY_CONTEXT, MenuItem.MenuContext::class.java)
         } ?: V1
+
+    @Composable
+    override fun ColumnScope.MainContent() {
 
         var loaded by remember { mutableStateOf(false) }
 
@@ -99,9 +111,39 @@ class CustomizeMenuDialogFragment : ComposeBaseDialogFragment3() {
         val inactiveItems: SnapshotStateList<MenuItem> = rememberMutableStateListOf(emptyList())
 
         LaunchedEffect(Unit) {
-            activeItems.addAll(loadConfiguration(menuContext))
-            inactiveItems.addAll(all - activeItems)
+            if (activeItems.isEmpty() && inactiveItems.isEmpty()) {
+                activeItems.addAll(loadConfiguration(menuContext))
+                inactiveItems.addAll(all - activeItems)
+            }
             loaded = true
+        }
+
+        if (menuContext == MenuItem.MenuContext.V2Navigation) {
+            val scope = rememberCoroutineScope()
+
+            val isTablet = isTablet
+
+            val navigationMode =
+                navigationModeAccessor.flow.collectAsState(initial = MenuItem.NavigationMode.DEFAULT)
+                    .value
+                    .validate(isTablet)
+
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+
+                (if (isTablet) MenuItem.NavigationMode.forTablet else MenuItem.NavigationMode.forPhone).forEachIndexed { index, item ->
+                    SegmentedButton(
+                        selected = navigationMode == item,
+                        onClick = { scope.launch { navigationModeAccessor.set(item) } },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+                        label = { Text(item.label) }
+                    )
+                }
+            }
+            HorizontalDivider(modifier = Modifier.padding(bottom = 8.dp))
         }
 
         if (loaded) {

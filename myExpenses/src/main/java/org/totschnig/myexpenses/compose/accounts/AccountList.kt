@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.ChevronRight
@@ -35,8 +37,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -59,10 +62,12 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.totschnig.myexpenses.R
@@ -84,14 +89,17 @@ import org.totschnig.myexpenses.compose.SubMenuEntry
 import org.totschnig.myexpenses.compose.TEST_TAG_ACCOUNTS
 import org.totschnig.myexpenses.compose.UiText
 import org.totschnig.myexpenses.compose.conditional
+import org.totschnig.myexpenses.compose.main.deltaLabel
+import org.totschnig.myexpenses.compose.main.validatedBalanceType
 import org.totschnig.myexpenses.compose.optional
 import org.totschnig.myexpenses.compose.scrollbar.LazyColumnWithScrollbar
 import org.totschnig.myexpenses.compose.scrollbar.LazyColumnWithScrollbarAndBottomPadding
-import org.totschnig.myexpenses.compose.transactions.BalanceType
+import org.totschnig.myexpenses.dialog.Percent
 import org.totschnig.myexpenses.model.AccountFlag
 import org.totschnig.myexpenses.model.AccountGrouping
 import org.totschnig.myexpenses.model.AccountGroupingKey
 import org.totschnig.myexpenses.model.AccountType
+import org.totschnig.myexpenses.model.BalanceType
 import org.totschnig.myexpenses.model.CurrencyUnit
 import org.totschnig.myexpenses.model.DEFAULT_FLAG_ID
 import org.totschnig.myexpenses.provider.DataBaseAccount.Companion.AGGREGATE_HOME_CURRENCY_CODE
@@ -104,6 +112,7 @@ import org.totschnig.myexpenses.viewmodel.data.BaseAccount
 import org.totschnig.myexpenses.viewmodel.data.Currency
 import org.totschnig.myexpenses.viewmodel.data.FullAccount
 import java.text.DecimalFormat
+import kotlin.math.absoluteValue
 
 const val SIGMA = "Σ"
 
@@ -240,23 +249,29 @@ fun AccountListV2(
             bottom = scaffoldPadding.calculateBottomPadding() + dimensionResource(R.dimen.fab_related_bottom_padding)
         )
     ) {
-        sortedGroupKeys.forEach { groupKey ->
+        sortedGroupKeys.forEachIndexed { index, groupKey ->
             val group = grouped.getValue(groupKey)
             val headerId = groupKey.id.toString()
             val isGroupHidden = collapsedGroupIds.contains(headerId)
-            item {
-                HeaderV2(
-                    header = groupKey.title(context),
-                    currency = groupKey as? CurrencyUnit
-                        ?: LocalHomeCurrency.current,
-                    total = group.filter { !it.excludeFromTotals }.sumOf {
-                        if (grouping == AccountGrouping.CURRENCY) it.currentBalance else it.equivalentCurrentBalance
-                    },
-                    onToggleExpand = { expansionHandlerGroups.toggle(headerId) },
-                    onNavigate = if (group.size < 2) null else {
-                        { onGroupSelected(groupKey) }
-                    }
-                )
+            stickyHeader(key = "header_$headerId") {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    tonalElevation = 1.dp
+                ) {
+                    HeaderV2(
+                        header = groupKey.title(context),
+                        currency = groupKey as? CurrencyUnit
+                            ?: LocalHomeCurrency.current,
+                        total = group.filter { !it.excludeFromTotals }.sumOf {
+                            if (grouping == AccountGrouping.CURRENCY) it.currentBalance else it.equivalentCurrentBalance
+                        },
+                        onToggleExpand = { expansionHandlerGroups.toggle(headerId) },
+                        onNavigate = if (group.size < 2) null else {
+                            { onGroupSelected(groupKey) }
+                        },
+                        isGrandTotal = grouping == AccountGrouping.NONE
+                    )
+                }
             }
             if (!isGroupHidden) {
                 //if we group by flag we also show the members of a group that is configured as invisible
@@ -273,19 +288,38 @@ fun AccountListV2(
                     }
                 }
             }
+            if (index != sortedGroupKeys.lastIndex) {
+                item {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 1.dp
+                    )
+                }
+            }
         }
         if (grouped.size > 1) {
             item {
-                HeaderV2(
-                    header = AccountGroupingKey.Ungrouped.title(context),
-                    currency = LocalHomeCurrency.current,
-                    total = accountData.filter { !it.excludeFromTotals }.sumOf {
-                        it.equivalentCurrentBalance
-                    },
-                    onToggleExpand = null,
-                    onNavigate = { onGroupSelected(null) },
-                    dividerThickness = 4.dp
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    thickness = 2.dp
                 )
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 2.dp
+                ) {
+                    HeaderV2(
+                        header = AccountGroupingKey.Ungrouped.title(context),
+                        currency = LocalHomeCurrency.current,
+                        total = accountData.filter { !it.excludeFromTotals }.sumOf {
+                            it.equivalentCurrentBalance
+                        },
+                        onToggleExpand = null,
+                        onNavigate = { onGroupSelected(null) },
+                        isGrandTotal = true
+                    )
+                }
             }
         }
     }
@@ -342,18 +376,15 @@ private fun HeaderV2(
     onNavigate: (() -> Unit)?,
     total: Long,
     currency: CurrencyUnit,
-    dividerThickness: Dp = 2.dp,
+    isGrandTotal: Boolean,
 ) {
 
     val format = LocalCurrencyFormatter.current
-    HorizontalDivider(
-        color = colorResource(id = androidx.appcompat.R.color.material_grey_300),
-        thickness = dividerThickness
-    )
+
     Row(
         modifier = Modifier
-            .optional(onToggleExpand) {
-                clickable(onClick = it)
+            .clickable {
+                if (onToggleExpand != null) onToggleExpand() else onNavigate?.invoke()
             }
             .heightIn(min = 48.dp)
             .semantics(mergeDescendants = true) {}
@@ -364,9 +395,13 @@ private fun HeaderV2(
             modifier = Modifier.weight(1f),
             text = header,
             style = MaterialTheme.typography.titleMedium,
-            color = colorResource(id = R.color.material_grey)
+            color = MaterialTheme.colorScheme.onSurface
         )
-        Text(format.convAmount(total, currency))
+        Text(
+            fontWeight = if (isGrandTotal) FontWeight.Bold else null,
+            text = format.convAmount(total, currency),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         if (onNavigate == null) {
             Spacer(Modifier.width(48.dp))
         } else {
@@ -424,37 +459,131 @@ fun AccountCardV2(
     flags: List<AccountFlag> = emptyList(),
     bankIcon: @Composable ((Modifier, Long) -> Unit)? = null,
 ) {
-
     val format = LocalCurrencyFormatter.current
-    val activatedBackgroundColor = colorResource(id = R.color.activatedBackground)
+    val activatedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer
+    val context = LocalContext.current
+
+    // 1. Define IDs for our inline icons
+    val lockedId = "locked"
+    val excludedId = "excluded"
+    val dynamicId = "dynamic"
+    val flagId = "flag"
+
+    // 2. Build the AnnotatedString with placeholders
+    val annotatedLabel = buildAnnotatedString {
+        append(account.label)
+        // Add a small space before icons
+        if (account.sealed || account.excludeFromTotals || account.dynamic || account.flag.icon != null) {
+            append(" ")
+        }
+        if (account.sealed) appendInlineContent(lockedId, "[locked]")
+        if (account.excludeFromTotals) appendInlineContent(excludedId, "[excluded]")
+        if (account.dynamic) appendInlineContent(dynamicId, "[dynamic]")
+        if (account.flag.icon != null) appendInlineContent(flagId, "[flag]")
+    }
+
+    // 3. Map IDs to actual Composable icons
+    val inlineContent = mapOf(
+        lockedId to InlineTextContent(
+            Placeholder(
+                16.sp, 16.sp,
+                PlaceholderVerticalAlign.Center
+            )
+        ) {
+            Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        },
+        excludedId to InlineTextContent(
+            Placeholder(
+                16.sp, 16.sp,
+                PlaceholderVerticalAlign.Center
+            )
+        ) {
+            val color = MaterialTheme.colorScheme.onSurfaceVariant
+            Icon(
+                imageVector = Icons.Filled.Functions,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.drawBehind {
+                    drawLine(
+                        color,
+                        Offset(size.width * 0.2f, size.height / 2),
+                        Offset(size.width * 0.8f, size.height / 2),
+                        3f
+                    )
+                }
+            )
+        },
+        dynamicId to InlineTextContent(
+            Placeholder(
+                16.sp, 16.sp,
+                PlaceholderVerticalAlign.Center
+            )
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ShowChart,
+                null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        flagId to InlineTextContent(
+            Placeholder(
+                16.sp, 16.sp,
+                PlaceholderVerticalAlign.Center
+            )
+        ) {
+            account.flag.icon?.let { icon ->
+                org.totschnig.myexpenses.compose.Icon(
+                    icon = icon,
+                    size = 12.sp,
+                    modifier = Modifier.semantics {
+                        contentDescription = account.flag.title(context)
+                    }
+                )
+            }
+        }
+    )
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
-            .conditional(isSelected) {
-                background(activatedBackgroundColor)
-            }
+            .heightIn(min = 48.dp)
+            .conditional(isSelected) { background(activatedBackgroundColor) }
             .clickable(onClick = onSelected)
             .padding(end = 4.dp, start = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AccountIndicator(
-            account = account,
-            bankIcon = bankIcon
-        )
-        if (account.description.isNullOrBlank()) {
-            Text(text = account.label, modifier = Modifier.weight(1f))
-        } else {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = account.label)
-                Text(text = account.description)
+        AccountIndicator(account = account, bankIcon = bankIcon)
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 2.dp)
+        ) {
+            // 4. Use the inlineContent property of the Text composable
+            Text(
+                text = annotatedLabel,
+                style = MaterialTheme.typography.bodyLarge,
+                inlineContent = inlineContent
+            )
+
+            if (!account.description.isNullOrBlank()) {
+                Text(
+                    text = account.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
-        Text(format.convAmount(account.currentBalance, account.currencyUnit))
+
+        Text(
+            text = format.convAmount(account.currentBalance, account.currencyUnit),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+
         OverFlowMenu(
             menu = accountMenu(
-                context = LocalContext.current,
+                context = context,
                 homeCurrency = LocalHomeCurrency.current,
                 account = account,
                 onEvent = onEvent,
@@ -468,8 +597,10 @@ fun AccountCardV2(
 fun AccountIndicator(
     account: FullAccount,
     bankIcon: @Composable ((Modifier, Long) -> Unit)? = null,
+    reducedSizeIfPossible: Boolean = false
 ) {
-    val fontSize = 13.sp
+    val fontSize = if (reducedSizeIfPossible && account.progress == null && bankIcon == null) 9.sp else 13.sp
+
     val size = with(LocalDensity.current) { (fontSize * 2).toDp() }
 
     val color = Color(account.color(resources = LocalResources.current))
@@ -523,7 +654,7 @@ fun AccountCard(
 ) {
     val format = LocalCurrencyFormatter.current
     val showMenu = rememberSaveable { mutableStateOf(false) }
-    val activatedBackgroundColor = colorResource(id = R.color.activatedBackground)
+    val activatedBackgroundColor = MaterialTheme.colorScheme.secondaryContainer
     val homeCurrency = LocalHomeCurrency.current
     val showEquivalent = (showEquivalentWorth) || account.isHomeAggregate
     val currency = if (showEquivalent) homeCurrency else account.currencyUnit
@@ -760,20 +891,17 @@ fun AccountCard(
 @Composable
 fun AccountSummaryV2(
     account: BaseAccount,
-    displayBalanceType: BalanceType,
     onDisplayBalanceTypeChange: (BalanceType) -> Unit,
 ) {
 
     when (account) {
         is FullAccount -> AccountSummaryV2(
             account,
-            displayBalanceType,
             onDisplayBalanceTypeChange
         )
 
         is AggregateAccount -> AccountSummaryV2(
             account,
-            displayBalanceType,
             onDisplayBalanceTypeChange
         )
     }
@@ -782,12 +910,11 @@ fun AccountSummaryV2(
 @Composable
 fun AccountSummaryV2(
     account: FullAccount,
-    displayBalanceType: BalanceType,
     onDisplayBalanceTypeChange: (BalanceType) -> Unit,
 ) {
     val homeCurrency = LocalHomeCurrency.current
     val isFx = account.currency != homeCurrency.code
-    val fXFormat = remember { DecimalFormat("#.############") }
+    val balanceType = account.validatedBalanceType
 
     SumRowV2(
         label = R.string.opening_balance,
@@ -823,6 +950,8 @@ fun AccountSummaryV2(
         )
     }
 
+    val hasMultipleBalanceTypeOptions = account.total != null || account.type.supportsReconciliation || account.criterion != null
+
     account.total?.let {
         SumRowV2(
             label = R.string.menu_aggregates,
@@ -830,7 +959,7 @@ fun AccountSummaryV2(
             currency = account.currencyUnit,
             modifier = Modifier.drawSumLine(),
             formattedEquivalentAmount = account.equivalentTotal.takeIf { isFx },
-            highlight = displayBalanceType == BalanceType.TOTAL
+            highlight = balanceType == BalanceType.TOTAL
         ) { onDisplayBalanceTypeChange(BalanceType.TOTAL) }
     }
 
@@ -842,13 +971,29 @@ fun AccountSummaryV2(
             drawSumLine()
         },
         formattedEquivalentAmount = account.equivalentCurrentBalance.takeIf { isFx },
-        highlight = displayBalanceType == BalanceType.CURRENT
-    ) { onDisplayBalanceTypeChange(BalanceType.CURRENT) }
+        highlight = balanceType == BalanceType.CURRENT,
+        onClick = if (hasMultipleBalanceTypeOptions) {
+            { onDisplayBalanceTypeChange(BalanceType.CURRENT) }
+        } else null
+    )
 
-    account.criterion?.let {
+    account.criterion?.let { criterion ->
+        val delta = account.currentBalance - criterion
+        val deltaPercent = delta.toFloat() / criterion
+
         SumRowV2(
-            label = if (it > 0) R.string.saving_goal else R.string.credit_limit,
-            amount = it,
+            label = account.deltaLabel,
+            amount = delta,
+            currency = account.currencyUnit,
+            percent = deltaPercent.absoluteValue,
+            highlight = balanceType == BalanceType.DELTA,
+            onClick = {
+                onDisplayBalanceTypeChange(BalanceType.DELTA)
+            }
+        )
+        SumRowV2(
+            label = if (account.criterion > 0) R.string.saving_goal else R.string.credit_limit,
+            amount = account.criterion,
             currency = account.currencyUnit,
         )
     }
@@ -858,13 +1003,13 @@ fun AccountSummaryV2(
             label = R.string.total_cleared,
             amount = account.clearedTotal,
             currency = account.currencyUnit,
-            highlight = displayBalanceType == BalanceType.CLEARED,
+            highlight = balanceType == BalanceType.CLEARED,
         ) { onDisplayBalanceTypeChange(BalanceType.CLEARED) }
         SumRowV2(
             label = R.string.total_reconciled,
             amount = account.reconciledTotal,
             currency = account.currencyUnit,
-            highlight = displayBalanceType == BalanceType.RECONCILED,
+            highlight = balanceType == BalanceType.RECONCILED,
         ) { onDisplayBalanceTypeChange(BalanceType.RECONCILED) }
     }
 }
@@ -872,11 +1017,11 @@ fun AccountSummaryV2(
 @Composable
 fun AccountSummaryV2(
     account: AggregateAccount,
-    displayBalanceType: BalanceType,
     onDisplayBalanceTypeChange: (BalanceType) -> Unit,
 ) {
     val homeCurrency = LocalHomeCurrency.current
     val isFx = account.currency != homeCurrency.code
+    val balanceType = account.validatedBalanceType
 
     SumRowV2(
         label = R.string.opening_balance,
@@ -913,6 +1058,9 @@ fun AccountSummaryV2(
     }
 
     val displayTotal = account.total ?: account.equivalentTotal.takeIf { it != 0L }
+
+    val hasMultipleBalanceTypeOptions = displayTotal != null
+
     displayTotal?.let {
         SumRowV2(
             label = R.string.menu_aggregates,
@@ -920,7 +1068,7 @@ fun AccountSummaryV2(
             currency = account.currencyUnit,
             modifier = Modifier.drawSumLine(),
             formattedEquivalentAmount = account.equivalentTotal.takeIf { isFx },
-            highlight = displayBalanceType == BalanceType.TOTAL
+            highlight = balanceType == BalanceType.TOTAL
         ) { onDisplayBalanceTypeChange(BalanceType.TOTAL) }
     }
 
@@ -932,8 +1080,11 @@ fun AccountSummaryV2(
             drawSumLine()
         },
         formattedEquivalentAmount = account.equivalentCurrentBalance.takeIf { isFx },
-        highlight = displayBalanceType == BalanceType.CURRENT
-    ) { onDisplayBalanceTypeChange(BalanceType.CURRENT) }
+        highlight = balanceType == BalanceType.CURRENT,
+        onClick = if (hasMultipleBalanceTypeOptions) {
+            { onDisplayBalanceTypeChange(BalanceType.CURRENT) }
+        } else null
+    )
 }
 
 
@@ -1023,16 +1174,25 @@ fun SumRowV2(
     currency: CurrencyUnit,
     modifier: Modifier = Modifier,
     formattedEquivalentAmount: Long? = null,
+    percent: Float? = null,
     highlight: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
     val fontWeight = if (highlight) FontWeight.Bold else null
+    val auxiliaryTextStyle = MaterialTheme.typography.labelSmall
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .optional(onClick) { clickable(onClick = it) },
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
+        if (onClick != null) {
+            RadioButton(
+                modifier = Modifier.padding(end = 2.dp),
+                selected = highlight,
+                onClick = null // handled by Surface
+            )
+        }
         Text(
             text = stringResource(label),
             modifier = Modifier.weight(1f),
@@ -1045,9 +1205,10 @@ fun SumRowV2(
                 AmountText(
                     it,
                     LocalHomeCurrency.current,
-                    fontSize = 10.sp
+                    fontSize = auxiliaryTextStyle.fontSize
                 )
             }
+            percent?.let { Percent(it, style = auxiliaryTextStyle) }
         }
     }
 }
@@ -1094,7 +1255,7 @@ private fun AccountPreview2() {
     AccountCardV2(
         account = FullAccount(
             id = 1,
-            label = "Account",
+            label = "Account witht long name and description",
             description = "Description",
             currencyUnit = CurrencyUnit.DebugInstance,
             color = android.graphics.Color.RED,
@@ -1126,7 +1287,7 @@ fun MixedText() {
 
 @Preview(fontScale = 2f)
 @Composable
-fun AccountIndicator() {
+fun AccountIndicatorPreview() {
     AccountIndicator(
         account = FullAccount(
             id = 1,

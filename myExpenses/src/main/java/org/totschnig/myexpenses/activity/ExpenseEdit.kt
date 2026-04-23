@@ -1229,16 +1229,22 @@ open class ExpenseEdit : AmountActivity<TransactionEditViewModel>(), ContribIFac
             showSnackBar(R.string.account_list_not_yet_loaded)
             return
         }
-        splitPartLauncher.launch(
-            TransactionEditData(
-                id = 0,
-                uuid = generateUuid(),
-                accountId = account.id,
-                amount = Money(account.currency, prefillAmount ?: BigDecimal.ZERO),
-                templateEditData = if (isMainTemplate) TemplateEditData() else null,
-                isSplitPart = true
-            )
-        )
+        Money.buildWithMajor(account.currency, prefillAmount ?: BigDecimal.ZERO)
+            .onSuccess {
+                splitPartLauncher.launch(
+                    TransactionEditData(
+                        id = 0,
+                        uuid = generateUuid(),
+                        accountId = account.id,
+                        amount = it,
+                        templateEditData = if (isMainTemplate) TemplateEditData() else null,
+                        isSplitPart = true
+                    )
+                )
+            }
+            .onFailure {
+                showSnackBar(R.string.number_too_large)
+            }
     }
 
     /**
@@ -1388,7 +1394,7 @@ open class ExpenseEdit : AmountActivity<TransactionEditViewModel>(), ContribIFac
 
     val amount: Money?
         get() = currentAccount?.let {
-            Money(it.currency, validateAmountInput(showToUser = false) ?: BigDecimal.ZERO)
+            amountInput.getAmount(it.currency, false).getOrNull()
         }
 
     fun isValidType(type: Int): Boolean {
@@ -1496,8 +1502,8 @@ open class ExpenseEdit : AmountActivity<TransactionEditViewModel>(), ContribIFac
                 } else doFinish()
             } else {
                 if (delegate.recurrenceSpinner.selectedItem === Recurrence.CUSTOM) {
-                    if (transaction.planId != null) {
-                        launchPlanView(true, transaction.planId)
+                    if (transaction.initialPlanId != null) {
+                        launchPlanView(true, transaction.initialPlanId)
                     } else {
                         CrashHandler.report(IllegalStateException("PlanId is null"))
                         hideKeyboard()

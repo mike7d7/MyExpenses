@@ -719,7 +719,7 @@
     <string name="pref_feature_uninstall_title">Solicitați dezinstalarea caracteristicilor și limbilor</string>
     <string name="template_default_action_without_amount_hint">Șablonul fără sumă ar trebui salvat cu acțiunea implicită „Editare”</string>
     <string name="plan_automatic_without_amount_hint">Planul fără sumă nu trebuie salvat cu execuția automată a planului</string>
-    <string name="github_sponsors">Cheile de licență sunt, de asemenea, furnizate &lt;unui href=%s&gt;Sponsorilor Github&lt;/a&gt;.</string>
+    <string name="github_sponsors"><![CDATA[Cheile de licență sunt, de asemenea, furnizate <unui href=%s>Sponsorilor Github</a>.]]></string>
     <string name="menu_tag">Etichetă</string>
     <string name="pref_ocr_time_formats_title">Formate de timp</string>
     <string name="content_description_download_exchange_rate">Descărcați cursul de schimb</string>
@@ -775,7 +775,6 @@
     <string name="budget_filter_all_parties">Toate părțile</string>
     <string name="warning_delete_budget">Bugetul „%1$s” va fi șters.</string>
     <string name="select_package">Vă rugăm să selectați un pachet de licențe.</string>
-    <string name="discover_feature_fab_long_press" tools:ignore="UnusedResources">Atingeți și mențineți apăsat butonul de acțiune flotantă pentru a deschide direct formularul pentru transferuri, tranzacții împărțite sau venituri.</string>
     <string name="advance_exexcution_in_days">Execuție în avans (în zile)</string>
     <string name="account_widget_configuration_sum">Tipul sumei afișate</string>
     <string name="account_widget_configuration_sum_total">Includeți tranzacțiile viitoare</string>

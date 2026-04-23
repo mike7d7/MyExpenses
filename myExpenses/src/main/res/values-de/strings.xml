@@ -757,11 +757,9 @@
     <string name="scan_result_no_date">Kein Datum gefunden</string>
     <string name="scan_result_no_payee">Keinen Empfänger gefunden</string>
     <string name="pref_feature_uninstall_title">Fordern Sie die Deinstallation von Funktionen und Sprachen an</string>
-    <string name="pref_feature_uninstall_summary">Play Store versucht schließlich, diese Module im Hintergrund zu entfernen.</string>
+    <string name="pref_feature_uninstall_summary">Der Play Store versucht, diese Module schließlich im Hintergrund zu entfernen.</string>
     <!-- Toast message shown if user clicks on Upgrade button before having selected a licence -->
     <string name="select_package">Bitte wählen Sie ein Lizenzpaket aus.</string>
-    <!-- This message is shwon when we highlight the floating action button and educate user about the menu that shows upon long press (tap and hold)  -->
-    <string name="discover_feature_fab_long_press">Tippen und halten Sie die flotierende Aktionsschaltfläche, um das Formular für Umbuchungen, mehrteilige Buchungen oder Einnahmen direkt zu öffnen.</string>
     <!-- Label for a slider control that allows to configure a plan to be executed (added to the ledger) the give number of days in advance -->
     <string name="advance_exexcution_in_days">Vorabausführung (in Tagen)</string>
     <string name="warning_balance_account_delete">Wenn Sie fortfahren, werden alle abgeglichenen Buchungen dieses Kontos aus der Datenbank gelöscht und Sie können diese nicht wiederherstellen.</string>
@@ -1050,4 +1048,11 @@
     <string name="pref_ui_start_screen_title">Startbildschirm</string>
     <string name="pref_ui_start_screen_last_visited">Zuletzt besucht</string>
     <string name="main_navigation">Hauptnavigation</string>
+    <string name="pref_fab_style_title">Stil der schwebenden Aktionsschaltfläche</string>
+    <string name="pref_fab_style_standard_description">Standard (Klick auf Pfeil öffnet Menü)</string>
+    <string name="pref_fab_style_compact_description">Kompakt (Tippen und halten für Menü)</string>
+    <string name="number_too_large">Zahl zu groß</string>
+    <string name="prioritize_flag_order">Reihenfolge der Markierungen priorisieren</string>
+    <string name="pref_content_based_colors_title">Konto-basierte dynamische Farbe</string>
+    <string name="pref_content_based_colors_summary">Die Designfarben werden von der Farbe des aktuellen Kontos abgeleitet. Deaktivieren Sie diese Option, falls der Text schwer lesbar ist.</string>
 </resources>

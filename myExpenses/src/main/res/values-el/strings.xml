@@ -713,7 +713,6 @@
     <string name="sync_backend_is_not_encrypted">Το απομακρυσμένο backend δεν είναι κρυπτογραφημένο.</string>
     <string name="request_for_invoice">Αίτηση τιμολογίου</string>
     <string name="pref_criterion_future_current">Τρέχουσα ώρα</string>
-    <string name="discover_feature_fab_long_press" tools:ignore="UnusedResources">Πατήστε παρατεταμένα το κυνούμενο κουμπί για να ανοίξετε απευθείας τη φόρμα για μεταφορές, διαχωρισμένες συναλλαγές ή έσοδα.</string>
     <string name="pref_clone_with_current_date_summary_off">Οι κλωνοποιημένες συναλλαγές διατηρούν την αρχική ημερομηνία</string>
     <string name="confirmation_load_template_discard_data">Τα υπάρχοντα δεδομένα φόρμας θα απορριφθούν.</string>
     <string name="unmapped_filter_only_single">Το φίλτρο \"Χωρίς χαρτογράφηση\" δεν μπορεί να συμπεριληφθεί σε πολλαπλές επιλογές</string>
@@ -812,7 +811,7 @@
     <string name="account_widget_configuration_sum_total">Συμπεριλάβετε μελλοντικές συναλλαγές</string>
     <string name="new_balance">Νέα ισορροπία</string>
     <string name="pref_unmapped_transaction_as_transfer_title">Μη κατανεμημένες συναλλαγές</string>
-    <string name="github_sponsors">Κλειδιά άδειας χρήσης παρέχονται επίσης στο &lt;a href=%s&gt;Github Sponsors&lt;/a&gt;.</string>
+    <string name="github_sponsors"><![CDATA[Κλειδιά άδειας χρήσης παρέχονται επίσης στο <a href=%s>Github Sponsors</a>.]]></string>
     <string name="select_template">Επιλέξτε πρότυπο</string>
     <string name="budget_only_current_period">Ορισμός μόνο για %s</string>
     <string name="button_relink_keep_date">Επανασύνδεση, αλλά διατήρηση ημερομηνίας</string>

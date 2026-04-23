@@ -23,7 +23,6 @@ import android.content.ContentValues;
 import android.content.OperationApplicationException;
 import android.content.UriMatcher;
 import android.database.Cursor;
-import android.database.MatrixCursor;
 import android.database.sqlite.SQLiteConstraintException;
 import android.net.Uri;
 import android.os.Bundle;
@@ -862,15 +861,7 @@ public class TransactionProvider extends BaseTransactionProvider {
         additionalWhere.append(TABLE_BUDGETS + "." + KEY_ROWID + "=").append(uri.getPathSegments().get(1));
         break;
       case ACCOUNT_DEFAULT_BUDGET_ALLOCATIONS: {
-        qb = SupportSQLiteQueryBuilder.builder(TABLE_BUDGET_ALLOCATIONS);
-        Long budgetId = budgetDefaultSelect(db, uri);
-        if (budgetId == null) {
-          return new MatrixCursor(projection, 0);
-        }
-        selection = KEY_CATID + " = 0 AND " + KEY_BUDGETID + " = ?";
-        selectionArgs = new String[] { budgetId.toString() };
-        extras.putLong(KEY_BUDGETID, budgetId);
-        break;
+        return budgetAllocationGroupsQuery(db, uri);
       }
       case BUDGET_FOR_PERIOD: {
         String sql = (projection != null && projection.length == 1 && projection[0].equals(KEY_BUDGET)) ? totalBudgetAllocation(uri) : budgetAllocation(uri);
@@ -1250,7 +1241,7 @@ public class TransactionProvider extends BaseTransactionProvider {
   }
 
   @Override
-  public int delete(@NonNull Uri uri, String where, String[] whereArgs) {
+  public int delete(@NonNull Uri uri, @Nullable String where, @Nullable String[] whereArgs) {
     log("Delete for URL: %s", uri);
     SupportSQLiteDatabase db = getHelper().getWritableDatabase();
     int count;
@@ -1328,20 +1319,11 @@ public class TransactionProvider extends BaseTransactionProvider {
         if (callerIsNotSyncAdapter(uri)) throw new IllegalArgumentException("Can only be called from sync adapter");
         count = db.delete(TABLE_TRANSACTIONS_TAGS, where, whereArgs);
       }
-      case TEMPLATES_TAGS -> {
-        count = db.delete(TABLE_TEMPLATES_TAGS, where, whereArgs);
-      }
-      case ACCOUNTS_TAGS -> {
-        count = db.delete(TABLE_ACCOUNTS_TAGS, where, whereArgs);
-      }
-      case DEBT_ID -> {
-        count = db.delete(TABLE_DEBTS,
-                KEY_ROWID + " = " + uri.getLastPathSegment() + prefixAnd(where), whereArgs);
-      }
-      case BANK_ID -> {
-        count = db.delete(TABLE_BANKS,
-                KEY_ROWID + " = " + uri.getLastPathSegment() + prefixAnd(where), whereArgs);
-      }
+      case TEMPLATES_TAGS -> count = db.delete(TABLE_TEMPLATES_TAGS, where, whereArgs);
+      case ACCOUNTS_TAGS -> count = db.delete(TABLE_ACCOUNTS_TAGS, where, whereArgs);
+      case DEBT_ID -> count = deleteDebt(db, uri.getLastPathSegment(), where, whereArgs);
+      case BANK_ID -> count = db.delete(TABLE_BANKS,
+              KEY_ROWID + " = " + uri.getLastPathSegment() + prefixAnd(where), whereArgs);
       case TRANSACTION_ID_ATTACHMENT_ID -> {
         String transactionId = uri.getPathSegments().get(2);
         String attachmentId = uri.getPathSegments().get(3);
@@ -1378,14 +1360,6 @@ public class TransactionProvider extends BaseTransactionProvider {
       notifyChange(uri, uriMatch == TRANSACTION_ID);
     }
     return count;
-  }
-
-  private String prefixAnd(String where) {
-    if (!TextUtils.isEmpty(where)) {
-      return " AND (" + where + ')';
-    } else {
-      return "";
-    }
   }
 
   @Override
@@ -1595,6 +1569,11 @@ public class TransactionProvider extends BaseTransactionProvider {
     if (uriMatch == ACCOUNT_FLAG_ID) {
       notifyChange(ACCOUNTS_URI, false);
     }
+    if (uriMatch == BUDGET_ID) {
+        notifyChange(BUDGETS_URI.buildUpon()
+                .appendPath("defaultBudgetAllocations")
+                .build(), false);
+    }
     return count;
   }
 
@@ -1645,9 +1624,7 @@ public class TransactionProvider extends BaseTransactionProvider {
   public Bundle call(@NonNull String method, @Nullable String arg, @Nullable Bundle extras) {
     log("Call method: %s, arg: %s, extras: %s", method, arg, extras);
     switch (method) {
-      case METHOD_BULK_START -> {
-        setBulkInProgress(true);
-      }
+      case METHOD_BULK_START -> setBulkInProgress(true);
       case METHOD_BULK_END -> {
         setBulkInProgress(false);
         notifyBulk();

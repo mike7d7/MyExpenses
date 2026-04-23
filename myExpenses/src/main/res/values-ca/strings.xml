@@ -820,7 +820,6 @@
     <string name="account_widget_configuration_sum">Tipus de suma mostrada</string>
     <string name="scan_result_no_date">No s\'ha trobat cap data</string>
     <string name="pref_feature_uninstall_summary">Play Store intenta eliminar eventualment els mòduls en segon pla.</string>
-    <string name="discover_feature_fab_long_press" tools:ignore="UnusedResources">Manteniu premut el botó d\'acció flotant per obrir directament el formulari de transferències, fraccionaments o ingressos.</string>
     <string name="advance_exexcution_in_days">Execució anticipada (en dies)</string>
     <string name="tesseract_download_confirmation">Voleu baixar les dades de reconeixement de text per a %s?</string>
     <string name="ocr_download_info">La capacitat de reconeixement de text ve proporcionada per una aplicació externa.</string>
@@ -834,7 +833,7 @@
     <string name="active_tags">Etiquetes actives</string>
     <string name="debt">Deute</string>
     <string name="select_all_list_too_large">L\'ordre %s no està disponible perquè la llista només està parcialment carregada. Utilitzeu la funcionalitat Cerca per a reduir la mida de la llista.</string>
-    <string name="github_sponsors">Les claus de llicència també es proporcionen a &lt;a href=%s&gt;Github Sponsors&lt;/a&gt;.</string>
+    <string name="github_sponsors"><![CDATA[Les claus de llicència també es proporcionen a <a href=%s>Github Sponsors</a>.]]></string>
     <string name="notifications_permission_required_planner"><i>{app_name}</i> necessita permís per enviar-vos notificacions, quan es publiquin transaccions futures.</string>
     <string name="notifications_permission_required_webui">En concedir el permís per enviar notificacions, podeu controlar l\'estat del servidor web.</string>
     <string name="notifications_permission_required_sync">En concedir el permís per a enviar notificacions, podeu controlar el progrés de les operacions de sincronització.</string>

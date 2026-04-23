@@ -14,7 +14,6 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.core.database.getLongOrNull
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.lifecycle.LiveData
@@ -59,6 +58,8 @@ import org.totschnig.myexpenses.compose.unselect
 import org.totschnig.myexpenses.db2.RepositoryTransaction
 import org.totschnig.myexpenses.db2.addAttachments
 import org.totschnig.myexpenses.db2.calculateSplitSummary
+import org.totschnig.myexpenses.db2.checkSealedStatus
+import org.totschnig.myexpenses.db2.checkTransferAccountOfSplitParts
 import org.totschnig.myexpenses.db2.createTransaction
 import org.totschnig.myexpenses.db2.entities.Transaction
 import org.totschnig.myexpenses.db2.groupToSplitTransaction
@@ -70,6 +71,7 @@ import org.totschnig.myexpenses.db2.loadTransaction
 import org.totschnig.myexpenses.db2.saveTagsForTransaction
 import org.totschnig.myexpenses.db2.setAccountProperty
 import org.totschnig.myexpenses.db2.setGrouping
+import org.totschnig.myexpenses.db2.setSort
 import org.totschnig.myexpenses.db2.tagMapFlow
 import org.totschnig.myexpenses.db2.unarchive
 import org.totschnig.myexpenses.db2.undeleteTransaction
@@ -82,7 +84,8 @@ import org.totschnig.myexpenses.model.CurrencyUnit
 import org.totschnig.myexpenses.model.Grouping
 import org.totschnig.myexpenses.model.Money
 import org.totschnig.myexpenses.model.generateUuid
-import org.totschnig.myexpenses.model.sort.SortDirection
+import org.totschnig.myexpenses.model.sort.Sort
+import org.totschnig.myexpenses.model.sort.TransactionSort
 import org.totschnig.myexpenses.model2.Bank
 import org.totschnig.myexpenses.preference.ColorSource
 import org.totschnig.myexpenses.preference.Mapper
@@ -122,7 +125,6 @@ import org.totschnig.myexpenses.provider.TransactionProvider.KEY_REPLACE
 import org.totschnig.myexpenses.provider.TransactionProvider.METHOD_SAVE_TRANSACTION_TAGS
 import org.totschnig.myexpenses.provider.TransactionProvider.QUERY_PARAMETER_MAPPED_OBJECTS
 import org.totschnig.myexpenses.provider.TransactionProvider.QUERY_PARAMETER_MERGE_CURRENCY_AGGREGATES
-import org.totschnig.myexpenses.provider.TransactionProvider.SORT_URI
 import org.totschnig.myexpenses.provider.TransactionProvider.TRANSACTIONS_URI
 import org.totschnig.myexpenses.provider.TransactionProvider.UNSPLIT_URI
 import org.totschnig.myexpenses.provider.TransactionProvider.URI_SEGMENT_LINK_TRANSFER
@@ -135,6 +137,8 @@ import org.totschnig.myexpenses.provider.filter.CrStatusCriterion
 import org.totschnig.myexpenses.provider.filter.Criterion
 import org.totschnig.myexpenses.provider.filter.FilterPersistence
 import org.totschnig.myexpenses.provider.filter.NULL_ITEM_ID
+import org.totschnig.myexpenses.provider.getInt
+import org.totschnig.myexpenses.provider.getLongOrNull
 import org.totschnig.myexpenses.provider.mapToListCatching
 import org.totschnig.myexpenses.provider.mapToListWithExtra
 import org.totschnig.myexpenses.provider.triggerAccountListRefresh
@@ -159,6 +163,7 @@ import org.totschnig.myexpenses.viewmodel.data.HeaderDataResult
 import org.totschnig.myexpenses.viewmodel.data.PageAccount
 import org.totschnig.myexpenses.viewmodel.data.Tag
 import org.totschnig.myexpenses.viewmodel.data.Transaction2
+import timber.log.Timber
 import java.time.LocalDate
 import kotlin.math.sign
 
@@ -267,10 +272,11 @@ open class MyExpensesViewModel(
             get() = transferAccount != null
     }
 
-    private val _selectedAccountId = savedStateHandle.getStateFlow(SELECTED_ACCOUNT_KEY, 0L)
+    private val _selectedAccountId = savedStateHandle.getStateFlow(SELECTED_ACCOUNT_KEY, 1L)
     val selectedAccountId: StateFlow<Long> = _selectedAccountId
 
     fun selectAccount(accountId: Long) {
+        Timber.d("selectAccount($accountId)")
         savedStateHandle[SELECTED_ACCOUNT_KEY] = accountId // This updates the StateFlow
         if (scrollToCurrentDatePreference == ScrollToCurrentDate.AccountOpen) {
             scrollToCurrentDate.getValue(accountId).value = true
@@ -330,22 +336,14 @@ open class MyExpensesViewModel(
         PreferenceAccessor(
             dataStore = dataStore,
             key = prefHandler.getStringPreferencesKey(PrefKey.ACCOUNT_GROUPING),
-            defaultValue = AccountGrouping.NONE,
+            defaultValue = AccountGrouping.DEFAULT,
             mapper = object : Mapper<AccountGrouping<*>, String> {
                 override fun toPreference(userValue: AccountGrouping<*>): String {
                     return userValue.name
                 }
 
-                override fun fromPreference(persistedValue: String): AccountGrouping<*> {
-                    // Deserialize from the string name
-                    return when (persistedValue) {
-                        "TYPE" -> AccountGrouping.TYPE
-                        "CURRENCY" -> AccountGrouping.CURRENCY
-                        "FLAG" -> AccountGrouping.FLAG
-                        "NONE" -> AccountGrouping.NONE
-                        else -> AccountGrouping.DEFAULT // Default fallback
-                    }
-                }
+                override fun fromPreference(persistedValue: String) =
+                    AccountGrouping.valueOf(persistedValue)
             }
         )
     }
@@ -486,6 +484,12 @@ open class MyExpensesViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0L)
 
+    val sortOrderAccounts: Sort
+        get() = prefHandler.enumValueOrDefault(
+            PrefKey.SORT_ORDER_ACCOUNTS,
+            Sort.USAGES
+        )
+
     val accountData: StateFlow<Result<List<FullAccount>>?> by lazy {
         contentResolver.observeQuery(
             uri = ACCOUNTS_URI.buildUpon()
@@ -511,22 +515,14 @@ open class MyExpensesViewModel(
                 uri = BaseTransactionProvider.defaultBudgetAllocationUri(
                     account.id,
                     account.grouping
-                ),
-                projection = arrayOf(
-                    KEY_YEAR,
-                    KEY_SECOND_GROUP,
-                    KEY_BUDGET,
-                    KEY_BUDGET_ROLLOVER_PREVIOUS,
-                    KEY_ONE_TIME
-                ),
-                sortOrder = "$KEY_YEAR, $KEY_SECOND_GROUP"
+                )
             ).map { it }
                 .mapToListWithExtra {
                     BudgetRow(
-                        headerId = Grouping.groupId(it.getInt(0), it.getInt(1)),
-                        amount = it.getLongOrNull(2),
-                        rollOverPrevious = it.getLongOrNull(3),
-                        oneTime = it.getInt(4) == 1
+                        headerId = Grouping.groupId(it.getInt(KEY_YEAR), it.getInt(KEY_SECOND_GROUP)),
+                        amount = it.getLongOrNull(KEY_BUDGET),
+                        rollOverPrevious = it.getLongOrNull(KEY_BUDGET_ROLLOVER_PREVIOUS),
+                        oneTime = it.getInt(KEY_ONE_TIME) == 1
                     )
                 }.map {
                     BudgetData(it.first.getLong(KEY_BUDGETID), it.second)
@@ -536,7 +532,13 @@ open class MyExpensesViewModel(
     fun sumInfo(account: PageAccount) = sums.getValue(account)
 
     fun persistGrouping(grouping: Grouping) {
-        viewModelScope.launch(context = coroutineContext()) {
+        viewModelScope.launch {
+            performPersistGrouping(grouping)
+        }
+    }
+
+    suspend fun performPersistGrouping(grouping: Grouping) {
+        withContext(coroutineContext()) {
             if (selectedAccountId.value == DataBaseAccount.HOME_AGGREGATE_ID) {
                 prefHandler.putString(GROUPING_AGGREGATE, grouping.name)
                 triggerAccountListRefresh()
@@ -546,26 +548,25 @@ open class MyExpensesViewModel(
         }
     }
 
-    fun persistSort(sort: String, direction: SortDirection) {
+    fun persistSort(transactionSort: TransactionSort) {
         viewModelScope.launch(context = coroutineContext()) {
+            performPersistSort(transactionSort)
+        }
+    }
+
+    suspend fun performPersistSort(transactionSort: TransactionSort) {
+        withContext(coroutineContext()) {
             if (selectedAccountId.value == DataBaseAccount.HOME_AGGREGATE_ID) {
-                persistSortDirectionHomeAggregate(sort, direction)
+                persistSortDirectionHomeAggregate(transactionSort)
             } else {
-                contentResolver.update(
-                    ContentUris.withAppendedId(SORT_URI, selectedAccountId.value)
-                        .buildUpon()
-                        .appendPath(sort)
-                        .appendPath(direction.name)
-                        .build(),
-                    null, null, null
-                )
+                repository.setSort(selectedAccountId.value, transactionSort)
             }
         }
     }
 
-    private fun persistSortDirectionHomeAggregate(sort: String, direction: SortDirection) {
-        prefHandler.putString(SORT_BY_AGGREGATE, sort)
-        prefHandler.putString(SORT_DIRECTION_AGGREGATE, direction.name)
+    private fun persistSortDirectionHomeAggregate(transactionSort: TransactionSort) {
+        prefHandler.putString(SORT_BY_AGGREGATE, transactionSort.column)
+        prefHandler.putString(SORT_DIRECTION_AGGREGATE, transactionSort.sortDirection.name)
         triggerAccountListRefresh()
     }
 
@@ -688,7 +689,7 @@ open class MyExpensesViewModel(
         get() = cloneAndRemapProgressInternal
 
     private fun RepositoryTransaction.clone(): RepositoryTransaction {
-        fun Transaction.clone(uuid: String) = copy(id = 0, uuid = uuid)
+        fun Transaction.clone(uuid: String) = copy(id = 0, uuid = uuid, crStatus = CrStatus.UNRECONCILED)
         val uuid = generateUuid()
         return copy(
             data = data.clone(uuid),
@@ -861,6 +862,14 @@ open class MyExpensesViewModel(
             emptyList()
         )
     }
+
+    suspend fun checkSealedStatus(itemIds: List<Long>, withTransfer: Boolean) =
+        repository.checkSealedStatus(itemIds, withTransfer)
+
+    suspend fun checkSealedStatus(accountId: Long) = repository.checkSealedStatus(accountId)
+
+    suspend fun checkTransferAccountOfSplitParts(itemIds: List<Long>) =
+        repository.checkTransferAccountOfSplitParts(itemIds)
 
     companion object {
         fun prefNameForCriteriaLegacy(accountId: Long) = "filter_%s_${accountId}"
