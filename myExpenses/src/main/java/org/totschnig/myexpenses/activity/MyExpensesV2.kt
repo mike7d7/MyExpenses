@@ -51,9 +51,11 @@ import org.totschnig.myexpenses.util.ads.AdHandlerV2
 import org.totschnig.myexpenses.util.crashreporting.CrashHandler.Companion.report
 import org.totschnig.myexpenses.viewmodel.MyExpensesV2ViewModel
 import org.totschnig.myexpenses.viewmodel.SumInfo
+import org.totschnig.myexpenses.viewmodel.data.AggregateAccount
 import org.totschnig.myexpenses.viewmodel.data.BaseAccount
 import org.totschnig.myexpenses.viewmodel.data.FullAccount
 import java.util.Optional
+import javax.inject.Inject
 
 enum class StartScreen {
     LastVisited, Accounts, Transactions, BalanceSheet
@@ -66,6 +68,9 @@ enum class StartScreen {
  */
 class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>(),
     SortUtilityDialogFragment.OnConfirmListener {
+
+    @Inject
+    lateinit var modelClass: Class<out MyExpensesV2ViewModel>
 
     private lateinit var adHandler: AdHandlerV2
 
@@ -114,7 +119,8 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>(),
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        viewModel = ViewModelProvider(this)[MyExpensesV2ViewModel::class.java]
+        viewModel = ViewModelProvider(this)[modelClass]
+
         with(injector) {
             inject(viewModel)
         }
@@ -188,7 +194,7 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>(),
                                 }
                             }
                         }
-                        val accounts = result.getOrThrow().withNaturalSort
+                        val accounts = result.getOrThrow()
                         val banks = viewModel.banks.collectAsState()
                         val showSortDialog = rememberSaveable { mutableStateOf(false) }
                         var isNavigationVisible by rememberSaveable { mutableStateOf(false) }
@@ -350,8 +356,13 @@ class MyExpensesV2 : BaseMyExpenses<MyExpensesV2ViewModel>(),
     }
 
     override suspend fun accountForNewTransaction() = Optional.ofNullable(
-        currentAccount as? FullAccount ?: viewModel.accountDataV2.value?.getOrNull()
-            ?.maxByOrNull { it.lastUsed }
+        when(currentAccount) {
+            is FullAccount -> currentAccount as? FullAccount
+            is AggregateAccount -> viewModel.accountDataV2.value?.getOrNull()
+                ?.filter { it.currency == currentAccount?.currency }
+                ?.maxByOrNull { it.lastUsed }
+            null -> null
+        }
     )
 
     override fun onSortOrderConfirmed(sortedIds: LongArray) {

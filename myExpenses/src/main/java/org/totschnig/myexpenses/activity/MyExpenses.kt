@@ -124,7 +124,7 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
     override val fabActionName = "CREATE_TRANSACTION"
 
     private val accountData: List<FullAccount>
-        get() = viewModel.accountData.value?.getOrNull()?.withNaturalSort ?: emptyList()
+        get() = viewModel.accountData.value?.getOrNull() ?: emptyList()
 
     override suspend fun accountForNewTransaction() = currentAccount?.let { current ->
             current.takeIf { !it.isAggregate } ?: viewModel.accountData.value?.getOrNull()
@@ -145,9 +145,6 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
 
     @Inject
     lateinit var discoveryHelper: IDiscoveryHelper
-
-    @Inject
-    lateinit var modelClass: Class<out MyExpensesViewModel>
 
     private var drawerToggle: ActionBarDrawerToggle? = null
 
@@ -296,7 +293,7 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         initLocaleContext()
-        viewModel = ViewModelProvider(this)[modelClass]
+        viewModel = ViewModelProvider(this)[MyExpensesViewModel::class.java]
         with(injector) {
             inject(viewModel)
             inject(roadmapViewModel)
@@ -873,7 +870,7 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        prefHandler.getCustomMenu().forEach { menuItem ->
+        prefHandler.getCustomMenuV1().forEach { menuItem ->
             if (menuItem.subMenu != null) {
                 val subMenu =
                     menu.addSubMenu(Menu.NONE, menuItem.id, Menu.NONE, menuItem.getLabel(this))
@@ -1218,7 +1215,7 @@ open class MyExpenses : BaseMyExpenses<MyExpensesViewModel>(), OnDialogResultLis
                 val hasNotVoted = vote == null
                 if (hasNotVoted) {
                     ConfirmationDialogFragment.newInstance(Bundle().apply {
-                        putCharSequence(KEY_MESSAGE, getString(R.string.roadmap_intro))
+                        putCharSequence(KEY_MESSAGE, getString(R.string.roadmap_intro, 2026))
                         putInt(KEY_COMMAND_POSITIVE, R.id.ROADMAP_COMMAND)
                         putString(ConfirmationDialogFragment.KEY_PREFKEY, prefKey)
                         putInt(KEY_POSITIVE_BUTTON_LABEL, R.string.roadmap_vote)

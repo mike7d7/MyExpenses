@@ -216,7 +216,7 @@ class TransactionEditViewModel(application: Application, savedStateHandle: Saved
         //noinspection MissingPermission
         return title to if (initialPlan.recurrence != Recurrence.NONE) repository.createPlan(
             title,
-            transaction.compileDescription(application, currencyFormatter, initialPlan.uuid),
+            transaction.compileDescription(localizedContext, currencyFormatter, initialPlan.uuid),
             initialPlan.date,
             initialPlan.recurrence
         ) else null
@@ -257,7 +257,7 @@ class TransactionEditViewModel(application: Application, savedStateHandle: Saved
                         repository.updatePlan(
                             transaction.planId,
                             template.title,
-                            transaction.compileDescription(application, currencyFormatter)
+                            transaction.compileDescription(localizedContext, currencyFormatter)
                         )
                     }
                     transaction.id
@@ -549,7 +549,7 @@ class TransactionEditViewModel(application: Application, savedStateHandle: Saved
             }
 
             InstantiationTask.TRANSACTION_FROM_TEMPLATE -> {
-                val template = repository.loadTemplate(rowId, withTags = true)
+                val template = repository.loadTemplate(rowId, withTags = true, require = false)
                 template?.instantiate(currencyContext, exchangeRateHandler)?.let {
                     TransactionMapper.map(it, currencyContext).copy(
                         originTemplate = TransactionMapper.mapTemplateEditData(template)

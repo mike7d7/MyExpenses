@@ -138,6 +138,7 @@ import org.totschnig.myexpenses.viewmodel.UpgradeHandlerViewModel
 import org.totschnig.myexpenses.viewmodel.data.AggregateAccount
 import org.totschnig.myexpenses.viewmodel.data.BaseAccount
 import org.totschnig.myexpenses.viewmodel.data.FullAccount
+import org.totschnig.myexpenses.viewmodel.data.HeaderDataEmpty
 import org.totschnig.myexpenses.viewmodel.data.PageAccount
 import org.totschnig.myexpenses.viewmodel.data.Transaction2
 import org.totschnig.myexpenses.viewmodel.getNaturalComparator
@@ -693,8 +694,8 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
                                     Pair(
                                         it.accountGrouping.name, when (it.accountGrouping) {
                                             AccountGrouping.CURRENCY -> it.currency to null
-                                            AccountGrouping.FLAG -> it.flag!!.let { it.title(this@BaseMyExpenses) to it.id }
-                                            AccountGrouping.TYPE -> it.type!!.let { it.title(this@BaseMyExpenses) to it.id }
+                                            AccountGrouping.FLAG -> it.flag.let { it.title(this@BaseMyExpenses) to it.id }
+                                            AccountGrouping.TYPE -> it.type.let { it.title(this@BaseMyExpenses) to it.id }
                                             AccountGrouping.NONE -> null
                                         }
                                     )
@@ -863,8 +864,8 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
                 KEY_ACCOUNT_GROUPING_GROUP,
                 when (currentAccount.accountGrouping) {
                     AccountGrouping.CURRENCY -> currentAccount.currency
-                    AccountGrouping.FLAG -> currentAccount.flag!!.id.toString()
-                    AccountGrouping.TYPE -> currentAccount.type!!.id.toString()
+                    AccountGrouping.FLAG -> currentAccount.flag.id.toString()
+                    AccountGrouping.TYPE -> currentAccount.type.id.toString()
                     else -> "Unit"
                 }
             )
@@ -1438,7 +1439,7 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
 
         val onToggleCrStatus = remember {
             derivedStateOf {
-                if (if (account.isAggregate || account.type?.supportsReconciliation == false) {
+                if (if (account.isAggregate || !account.type.supportsReconciliation) {
                         false
                     } else {
                         showStatusHandleState.value
@@ -1447,7 +1448,7 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
             }
         }
 
-        val headerData = remember(account) { viewModel.headerData(account, v2) }
+        val headerData = remember(account.queryKey) { viewModel.headerData(account, v2) }
 
         val isProcessingFilter = remember { mutableStateOf(false) }
 
@@ -1459,14 +1460,13 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
                 }
         ) {
 
-            val filter = viewModel.filterPersistence.getValue(account.id)
-                .whereFilter
-                .collectAsState(null)
+            val persistence = remember(account.id) { viewModel.filterPersistence.getValue(account.id) }
+            val filter = persistence.whereFilter.collectAsState(null)
             filter.value?.let { filter ->
                 FilterHandler(account, "confirmFilterDirect_${account.id}", { oldValue, newValue ->
                     if (newValue != null && oldValue != null) {
                         lifecycleScope.launch {
-                            currentFilter.replaceCriterion(oldValue, newValue)
+                            persistence.replaceCriterion(oldValue, newValue)
                         }
                     }
                 }) {
@@ -1481,7 +1481,7 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
                                 isProcessingFilter.value = true
                                 lifecycleScope.launch {
                                     try {
-                                        currentFilter.removeCriterion(it)
+                                        persistence.removeCriterion(it)
                                         invalidateOptionsMenu()
                                     } finally {
                                         isProcessingFilter.value = false
@@ -1493,10 +1493,15 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
                 }
             }
 
-            headerData.collectAsState().value.let { headerData ->
-                val lazyPagingItems =
-                    viewModel.items.getValue(account).collectAsLazyPagingItems()
+            headerData.collectAsState()
+                .value
+                .takeIf { it !is HeaderDataEmpty }
+                ?.let { headerData ->
+
+                val lazyPagingItems = viewModel.getTransactions(account).collectAsLazyPagingItems()
+
                 if (!account.sealed) {
+
                     LaunchedEffect(viewModel.selectAllState.value) {
                         if (viewModel.selectAllState.value) {
                             if (lazyPagingItems.loadState.prepend.endOfPaginationReached &&
@@ -1752,9 +1757,4 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
                 else -> false
             }
         } else false
-
-    val List<FullAccount>.withNaturalSort: List<FullAccount>
-        get() = if (viewModel.sortOrderAccounts == Sort.LABEL)
-            sortedWith(compareBy(getNaturalComparator()) { it.label })
-        else this
 }

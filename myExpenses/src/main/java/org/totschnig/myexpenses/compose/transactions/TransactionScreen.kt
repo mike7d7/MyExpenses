@@ -91,10 +91,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.totschnig.myexpenses.R
 import org.totschnig.myexpenses.activity.StartScreen
-import org.totschnig.myexpenses.compose.AmountText
 import org.totschnig.myexpenses.compose.ColoredAmountText
 import org.totschnig.myexpenses.compose.LocalCurrencyFormatter
 import org.totschnig.myexpenses.compose.OverFlowMenu
+import org.totschnig.myexpenses.compose.TEST_TAG_ACCOUNT_LABEL
+import org.totschnig.myexpenses.compose.TEST_TAG_BALANCE_AMOUNT
+import org.totschnig.myexpenses.compose.TEST_TAG_BALANCE_HEADER
+import org.totschnig.myexpenses.compose.TEST_TAG_CAB
+import org.totschnig.myexpenses.compose.TEST_TAG_FAB_TRANSACTIONS
 import org.totschnig.myexpenses.compose.TEST_TAG_PAGER
 import org.totschnig.myexpenses.compose.TooltipIconButton
 import org.totschnig.myexpenses.compose.accounts.AccountIndicator
@@ -102,8 +106,8 @@ import org.totschnig.myexpenses.compose.accounts.AccountSummaryV2
 import org.totschnig.myexpenses.compose.conditional
 import org.totschnig.myexpenses.compose.main.AppEvent
 import org.totschnig.myexpenses.compose.main.AppEventHandler
-import org.totschnig.myexpenses.compose.main.getBalanceContentDescription
 import org.totschnig.myexpenses.compose.main.balanceForType
+import org.totschnig.myexpenses.compose.main.getBalanceContentDescription
 import org.totschnig.myexpenses.compose.main.icon
 import org.totschnig.myexpenses.compose.main.parseMenu
 import org.totschnig.myexpenses.compose.main.rememberCollapsingTabRowState
@@ -114,6 +118,7 @@ import org.totschnig.myexpenses.model.AccountGroupingKey
 import org.totschnig.myexpenses.model.AccountType
 import org.totschnig.myexpenses.model.BalanceType
 import org.totschnig.myexpenses.model.CurrencyUnit
+import org.totschnig.myexpenses.preference.PreferenceState
 import org.totschnig.myexpenses.util.convAmount
 import org.totschnig.myexpenses.viewmodel.MyExpensesV2ViewModel
 import org.totschnig.myexpenses.viewmodel.data.BaseAccount
@@ -130,7 +135,6 @@ enum class FabStyle {
 @Composable
 fun TransactionScreen(
     containerColor: Color = MaterialTheme.colorScheme.background,
-    accounts: List<FullAccount>,
     availableFilters: List<AccountGroupingKey>,
     selectedAccountId: Long,
     viewModel: MyExpensesV2ViewModel,
@@ -181,6 +185,7 @@ fun TransactionScreen(
             }
         }
     }
+
     val accountColor = Color(currentAccount.color(LocalResources.current))
 
     Scaffold(
@@ -188,6 +193,7 @@ fun TransactionScreen(
         containerColor = containerColor,
         topBar = {
             val isInSelectionMode = viewModel.selectionState.value.isNotEmpty()
+            val height = 52.dp  + 30.dp * (LocalDensity.current.fontScale -1)
             Crossfade(
                 targetState = isInSelectionMode,
                 label = "TopBarTransition"
@@ -198,6 +204,7 @@ fun TransactionScreen(
                     }
                     val context = LocalContext.current
                     TopAppBar(
+                        modifier = Modifier.height(height),
                         navigationIcon = {
                             TooltipIconButton(
                                 tooltip = stringResource(R.string.menu_close),
@@ -206,6 +213,7 @@ fun TransactionScreen(
                         },
                         title = {
                             ColoredAmountText(
+                                modifier = Modifier.testTag(TEST_TAG_CAB),
                                 prefix = "${viewModel.selectionState.value.size}  (Σ: ",
                                 amount = viewModel.selectedTransactionSum,
                                 currency = currentAccount.currencyUnit,
@@ -242,8 +250,7 @@ fun TransactionScreen(
                     }
 
                     TopAppBar(
-                        modifier = Modifier
-                            .height(52.dp  + 30.dp * (LocalDensity.current.fontScale -1)),
+                        modifier = Modifier.height(height),
                         navigationIcon = navigationIcon,
                         title = {
                             BalanceHeader(
@@ -264,38 +271,48 @@ fun TransactionScreen(
                             )
                         },
                         actions = {
-                            val menuConfig = viewModel.transactionScreenMenu.collectAsState()
+                            val menuConfig = viewModel.transactionMenuAccessor.statefulFlow
+                                .collectAsState(PreferenceState.Loading).value
 
-                            val filteredItems = menuConfig.value.filter {
-                                onPrepareMenuItem(it.id)
-                            }
+                            if (menuConfig is PreferenceState.Loaded) {
 
-                            //no need to show overflow menu if there is only one item
-                            val quickItems = if (filteredItems.size > 1) filteredItems.take(visibleActionItems) else filteredItems
-                            val overflowItems = filteredItems - quickItems.toSet()
-
-                            quickItems.forEach {
-                                if (it == MenuItem.Tune) {
-                                    ViewOptionsMenu(
-                                        currentAccount = currentAccount,
-                                        onEvent = onEvent
-                                    )
-                                } else {
-                                    val isChecked = if (it.isCheckable) isChecked(it) else null
-                                    TooltipIconButton(
-                                        tooltip = it.getLabel(LocalContext.current),
-                                        painter = it.painter,
-                                        isChecked = isChecked == true
-                                    ) { onEvent(AppEvent.MenuItemClicked(it.id, isChecked?.not())) }
+                                val filteredItems = menuConfig.value.filter {
+                                    onPrepareMenuItem(it.id)
                                 }
-                            }
 
-                            ActionMenu(
-                                currentAccount = currentAccount,
-                                items = overflowItems,
-                                onEvent = onEvent,
-                                isChecked = ::isChecked
-                            )
+                                //no need to show overflow menu if there is only one item
+                                val quickItems = if (filteredItems.size > 1) filteredItems.take(
+                                    visibleActionItems
+                                ) else filteredItems
+                                val overflowItems = filteredItems - quickItems.toSet()
+
+                                quickItems.forEach { menuItem ->
+                                    if (menuItem == MenuItem.Tune) {
+                                        ViewOptionsMenu(
+                                            currentAccount = currentAccount,
+                                            onEvent = onEvent
+                                        )
+                                    } else {
+                                        val isChecked =
+                                            if (menuItem.isCheckable) isChecked(menuItem) else null
+                                        TooltipIconButton(menuItem, isChecked == true) {
+                                            onEvent(
+                                                AppEvent.MenuItemClicked(
+                                                    menuItem.id,
+                                                    isChecked?.not()
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+
+                                ActionMenu(
+                                    currentAccount = currentAccount,
+                                    items = overflowItems,
+                                    onEvent = onEvent,
+                                    isChecked = ::isChecked
+                                )
+                            }
                         },
                     )
                 }
@@ -308,6 +325,7 @@ fun TransactionScreen(
             if (currentAccount is FullAccount && (currentAccount as FullAccount).sealed) {
                 FloatingActionButton(
                     onClick = { },
+                    modifier = Modifier.testTag(TEST_TAG_FAB_TRANSACTIONS),
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
                     elevation = FloatingActionButtonDefaults.elevation(
@@ -331,7 +349,7 @@ fun TransactionScreen(
                     onEvent(
                         AppEvent.CreateTransaction(
                             action = action,
-                            transferEnabled = accounts.size > 1
+                            transferEnabled = accountList.size > 1
                         )
                     )
                 }
@@ -435,7 +453,7 @@ fun TransactionScreen(
                         .fillMaxSize()
                         .testTag(TEST_TAG_PAGER)
                         .semantics {
-                            collectionInfo = CollectionInfo(1, accounts.size)
+                            collectionInfo = CollectionInfo(1, accountList.size)
                         },
                     state = pagerState,
                     pageSpacing = 10.dp,
@@ -495,6 +513,7 @@ private fun BalanceHeader(
 
     Row(
         modifier = modifier
+            .testTag(TEST_TAG_BALANCE_HEADER)
             .semantics {
                 role = Role.Button
             }
@@ -513,7 +532,6 @@ private fun BalanceHeader(
         ) {
 
             val isWideLayout = maxWidth > 300.dp
-
             // Adaptive Content: Switch between Column and Row
             if (isWideLayout) {
                 Row(
@@ -630,7 +648,7 @@ private fun AccountLabel(
     modifier: Modifier = Modifier,
 ) {
     Text(
-        modifier = modifier,
+        modifier = modifier.testTag(TEST_TAG_ACCOUNT_LABEL),
         text = account.labelV2(LocalContext.current),
         style = MaterialTheme.typography.titleMedium,
         maxLines = 1,
@@ -669,8 +687,10 @@ private fun BalanceSection(
                 )
             )
         ) {
-            AmountText(
-                balance, account.currencyUnit,
+            ColoredAmountText(
+                modifier = Modifier.testTag(TEST_TAG_BALANCE_AMOUNT),
+                amount = balance,
+                currency = account.currencyUnit,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 14.sp,
                 overflow = TextOverflow.Visible,
@@ -680,7 +700,7 @@ private fun BalanceSection(
     }
 }
 
-@Preview(fontScale = 2f)
+@Preview(fontScale = 1f, widthDp = 400)
 @Composable
 fun HeaderPreview() {
     BalanceHeader(

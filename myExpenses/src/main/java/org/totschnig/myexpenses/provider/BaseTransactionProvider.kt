@@ -217,12 +217,12 @@ abstract class BaseTransactionProvider : ContentProvider() {
         }
     }
 
-    fun callerIsNotSyncAdapter(uri: Uri): Boolean {
-        return !uri.getBooleanQueryParameter(
-            TransactionProvider.QUERY_PARAMETER_CALLER_IS_SYNCADAPTER,
-            false
-        )
-    }
+    fun callerIsNotSyncAdapter(uri: Uri) = !callerIsSyncAdapter(uri)
+
+    fun callerIsSyncAdapter(uri: Uri) = uri.getBooleanQueryParameter(
+        TransactionProvider.QUERY_PARAMETER_CALLER_IS_SYNCADAPTER,
+        false
+    )
 
     fun deleteTransaction(db: SupportSQLiteDatabase, uri: Uri): Int {
         val segment = uri.pathSegments[1]
@@ -247,27 +247,28 @@ abstract class BaseTransactionProvider : ContentProvider() {
                 arrayOf(segment)
             )
             //we delete the transaction, its children and its transfer peer, and transfer peers of its children
-            val count = if (uri.getQueryParameter(TransactionProvider.QUERY_PARAMETER_MARK_VOID) == null) {
-                //we delete the parent separately, so that the changes trigger can correctly record the parent uuid
-                db.delete(
-                    TABLE_TRANSACTIONS,
-                    WHERE_DEPENDENT,
-                    arrayOf<String?>(segment, segment)
-                ) + db.delete(
-                    TABLE_TRANSACTIONS,
-                    WHERE_SELF_OR_PEER,
-                    arrayOf<String?>(segment, segment)
-                )
-            } else {
-                val v = ContentValues()
-                v.put(KEY_CR_STATUS, CrStatus.VOID.name)
-                db.update(
-                    TABLE_TRANSACTIONS,
-                    v,
-                    WHERE_SELF_OR_RELATED,
-                    arrayOf(segment, segment, segment)
-                )
-            }
+            val count =
+                if (uri.getQueryParameter(TransactionProvider.QUERY_PARAMETER_MARK_VOID) == null) {
+                    //we delete the parent separately, so that the changes trigger can correctly record the parent uuid
+                    db.delete(
+                        TABLE_TRANSACTIONS,
+                        WHERE_DEPENDENT,
+                        arrayOf<String?>(segment, segment)
+                    ) + db.delete(
+                        TABLE_TRANSACTIONS,
+                        WHERE_SELF_OR_PEER,
+                        arrayOf<String?>(segment, segment)
+                    )
+                } else {
+                    val v = ContentValues()
+                    v.put(KEY_CR_STATUS, CrStatus.VOID.name)
+                    db.update(
+                        TABLE_TRANSACTIONS,
+                        v,
+                        WHERE_SELF_OR_RELATED,
+                        arrayOf(segment, segment, segment)
+                    )
+                }
             db.setTransactionSuccessful()
             count
         } finally {
@@ -448,10 +449,10 @@ abstract class BaseTransactionProvider : ContentProvider() {
 
         val STALE_ATTACHMENT_SELECTION = "NOT ${LIVE_ATTACHMENT_SELECTION()}"
 
-        fun defaultBudgetAllocationUri(accountId: Long, grouping: Grouping): Uri =
+        fun defaultBudgetAllocationUri(accountSegment: String, grouping: Grouping): Uri =
             BUDGETS_URI.buildUpon()
                 .appendPath(TransactionProvider.URI_SEGMENT_DEFAULT_BUDGET_ALLOCATIONS)
-                .appendPath(accountId.toString())
+                .appendPath(accountSegment)
                 .appendPath(grouping.name)
                 .build()
 
@@ -1076,13 +1077,16 @@ abstract class BaseTransactionProvider : ContentProvider() {
         db: SupportSQLiteDatabase,
         uri: Uri,
     ): Long? {
-        val accountId = uri.pathSegments[2].toLong()
-        val group = uri.pathSegments[3]
+        val segment2 = uri.pathSegments[2]
+        val accountId = segment2.toLongOrNull()
         val (accountSelection, accountSelectionArg) = when {
+            accountId == null -> "$KEY_CURRENCY = ?" to segment2
             accountId > 0 -> "$KEY_ACCOUNTID = ?" to accountId
             accountId == HOME_AGGREGATE_ID -> "$KEY_CURRENCY = ?" to AGGREGATE_HOME_CURRENCY_CODE
             else -> "$KEY_CURRENCY = (select $KEY_CURRENCY from $TABLE_CURRENCIES where $KEY_ROWID = ?)" to -accountId
         }
+        val group = uri.pathSegments[3]
+
         return db.query(
             TABLE_BUDGETS,
             arrayOf(KEY_ROWID),
@@ -1411,6 +1415,7 @@ abstract class BaseTransactionProvider : ContentProvider() {
         )
         val budgetId = budgetDefaultSelect(db, uri) ?: return MatrixCursor(projection).apply {
             setNotificationUri(context!!.contentResolver, uri)
+            log("$uri: no default budget found")
         }
 
         val sql = """
@@ -1471,7 +1476,8 @@ abstract class BaseTransactionProvider : ContentProvider() {
         val accountQuery = uri.accountSelector
 
         //Grand total account or aggregate account for type or flag
-        val forHome: String? = if (uri.getQueryParameter(KEY_ACCOUNTID) == null && uri.getQueryParameter(KEY_CURRENCY) == null) homeCurrency else null
+        val forHome: String? =
+            if (uri.getQueryParameter(KEY_ACCOUNTID) == null && uri.getQueryParameter(KEY_CURRENCY) == null) homeCurrency else null
 
         val group = enumValueOrDefault(uri.pathSegments[2], Grouping.NONE)
 
@@ -2044,7 +2050,11 @@ abstract class BaseTransactionProvider : ContentProvider() {
                 mergeCategory(it.getLong(0), it.getLong(1))
             }
         }
-        fun update(table: String, column: String = KEY_CATID, conflictAlgorithm: Int = CONFLICT_NONE) {
+        fun update(
+            table: String,
+            column: String = KEY_CATID,
+            conflictAlgorithm: Int = CONFLICT_NONE,
+        ) {
             update(
                 table,
                 ContentValues(1).apply {
@@ -2175,12 +2185,13 @@ abstract class BaseTransactionProvider : ContentProvider() {
                 """.trimMargin()
             )
             //parts are promoted to independence
-            val partUpdateCount = compileStatement("UPDATE $TABLE_TRANSACTIONS SET $KEY_PARENTID = null, $KEY_CR_STATUS = $crStatusSubSelect, $KEY_PAYEEID = $payeeIdSubSelect WHERE $KEY_PARENTID = ?").use {
-                it.bindString(1, uuid)
-                it.bindString(2, uuid)
-                it.bindLong(3, transactionId)
-                it.executeUpdateDelete()
-            }
+            val partUpdateCount =
+                compileStatement("UPDATE $TABLE_TRANSACTIONS SET $KEY_PARENTID = null, $KEY_CR_STATUS = $crStatusSubSelect, $KEY_PAYEEID = $payeeIdSubSelect WHERE $KEY_PARENTID = ?").use {
+                    it.bindString(1, uuid)
+                    it.bindString(2, uuid)
+                    it.bindLong(3, transactionId)
+                    it.executeUpdateDelete()
+                }
             //Change is recorded
             if (callerIsNotSyncAdapter) {
                 execSQL(
@@ -2256,25 +2267,57 @@ abstract class BaseTransactionProvider : ContentProvider() {
     val dynamicCurrenciesSelection
         get() = "$dynamicExchangeRatesDefault AND $KEY_CURRENCY != ?"
 
-    /**
-     * @param transactionId can be passed in as Long or String
-     */
     fun SupportSQLiteDatabase.insertOrReplaceEquivalentAmount(
         transactionId: Long,
-        equivalentAmount: Long,
-    ) {
-        // we do not use "Insert or replace" because we would receive insert trigger instead of
-        // update trigger and we would not be able to check if value has changed
-        val count = update(
-            TABLE_EQUIVALENT_AMOUNTS,
-            ContentValues(1).apply {
-                put(KEY_EQUIVALENT_AMOUNT, equivalentAmount)
-            }, "$KEY_TRANSACTIONID = ? AND $KEY_CURRENCY = ?", arrayOf(transactionId, homeCurrency)
-        )
-        if (count == 0) {
-            insertEquivalentAmount(transactionId, equivalentAmount)
+        equivalentAmount: Long?,
+    ): Int {
+        val whereClause = "$KEY_TRANSACTIONID = ? AND $KEY_CURRENCY = ?"
+        val whereArgs = arrayOf<Any>(transactionId, homeCurrency)
+        return if (equivalentAmount == null) {
+            delete(
+                TABLE_EQUIVALENT_AMOUNTS,
+                whereClause,
+                whereArgs
+            )
+        } else {
+            // we do not use "Insert or replace" because we would receive insert trigger instead of
+            // update trigger, and we would not be able to check if value has changed
+            update(
+                TABLE_EQUIVALENT_AMOUNTS,
+                ContentValues(1).apply {
+                    put(KEY_EQUIVALENT_AMOUNT, equivalentAmount)
+                },
+                whereClause,
+                whereArgs
+            ).takeIf { it != 0 } ?: run {
+                insertEquivalentAmount(transactionId, equivalentAmount)
+                1
+            }
         }
     }
+
+    fun SupportSQLiteDatabase.insertOrReplaceEquivalentAmount(
+        equivalentAmount: Long?,
+        where: String?,
+        whereArgs: Array<Any>?,
+    ) = query(
+        table = TABLE_TRANSACTIONS,
+        columns = arrayOf(KEY_ROWID),
+        selection = where,
+        selectionArgs = whereArgs
+    ).use {
+        if (it.moveToFirst()) {
+            var count = 0
+            do {
+                count += insertOrReplaceEquivalentAmount(it.getLong(0), equivalentAmount)
+            } while (it.moveToNext())
+            count
+        } else {
+            report(IllegalArgumentException("selection = $where, args  = ${whereArgs?.joinToString()} "))
+            0
+        }
+    }
+
 
     /**
      * also populates account exchange rates where missing and possible
@@ -2516,7 +2559,9 @@ abstract class BaseTransactionProvider : ContentProvider() {
 
     fun SupportSQLiteDatabase.deleteDebt(debId: String, where: String?, whereArgs: Array<String>?) =
         safeUpdateWithSealed(protectDebts = false) {
-            delete(TABLE_DEBTS,
-                "$KEY_ROWID = $debId${prefixAnd(where)}", whereArgs)
+            delete(
+                TABLE_DEBTS,
+                "$KEY_ROWID = $debId${prefixAnd(where)}", whereArgs
+            )
         }
 }

@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="versions">
-        <item>843;4.0.7</item>
+        <item>859;4.1.0.pre;1963</item>
+        <item>858;4.0.9.1</item>
+        <item>857;4.0.9</item>
+        <item>851;4.0.8</item>
+        <item>846;4.0.7</item>
         <item>830;4.0.6</item>
         <item>823;4.0.5</item>
         <item>813;4.0.4</item>
@@ -100,7 +104,8 @@
     <string name="version_more_info_405">115661336364646450</string>
     <string name="version_more_info_406">116012878168587523</string>
     <string name="version_more_info_407">116450570746835831</string>
-
+    <string name="version_more_info_408">116539859736344536</string>
+    <string name="version_more_info_409">116633341553126335</string>
 
     <!-- Github -->
     <!-- Legacy -->
@@ -153,6 +158,9 @@
     <string name="project_board_405">173</string>
     <string name="project_board_406">172</string>
     <string name="project_board_407">177</string>
+    <string name="project_board_408">185</string>
+    <string name="project_board_409">187</string>
+    <string name="project_board_4091">188</string>
 
     <string-array name="whats_new_361">
         <item>@string/whats_new_361_1</item>
@@ -219,5 +227,8 @@
     </string-array>
     <string-array name="whats_new_407">
         <item>@string/whats_new_407</item>
+    </string-array>
+    <string-array name="whats_new_4091">
+        <item>@string/bug_fixes</item>
     </string-array>
 </resources>
