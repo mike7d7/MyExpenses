@@ -101,6 +101,12 @@ class PreferenceUiFragment : BasePreferenceFragment() {
             }
         }
 
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                preferenceDataStore.handleList(requirePreference(PrefKey.DEFAULT_ACTION))
+            }
+        }
+
         val colorSourcePreference =
             requirePreference<ListPreference>(PrefKey.TRANSACTION_AMOUNT_COLOR_SOURCE)
         val expenseColor = getColor(resources, R.color.colorExpense, null)
@@ -228,6 +234,13 @@ class PreferenceUiFragment : BasePreferenceFragment() {
                 if (newValue == Version.V2.name) true else {
                     LegacyUIDialogFragment().show(childFragmentManager, "LEGACY_UI")
                     false
+                }
+            }
+            lifecycleScope.launch {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    viewModel.hasPortfolioAccounts.collect { result ->
+                       isVisible = !result
+                    }
                 }
             }
         }

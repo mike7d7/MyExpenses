@@ -251,7 +251,10 @@ public class TransactionDatabase extends BaseTransactionDatabase {
           KEY_GROUPING + " text not null check (" + KEY_GROUPING + " in (" + Grouping.JOIN + ")) default '" + Grouping.NONE.name() + "'," +
           KEY_SORT_BY + " text default 'date', " +
           KEY_SORT_DIRECTION + " text not null check (" + KEY_SORT_DIRECTION + " in ('ASC','DESC')) default 'DESC'," +
-          KEY_LABEL + " text);";
+          KEY_LABEL + " text," +
+          KEY_FRACTION_DIGITS + " integer," +
+          KEY_SYMBOL + " text," +
+          KEY_COMMODITY_TYPE + " text);";
 
   /**
    * in this table we store links between plan instances and transactions,
@@ -1253,7 +1256,8 @@ public class TransactionDatabase extends BaseTransactionDatabase {
         if (c.moveToFirst()) {
           while (!c.isAfterLast()) {
             CurrencyContext currencyContext = MyApplication.Companion.getInstance().getAppComponent().currencyContext();
-            currencyContext.ensureFractionDigitsAreCached(currencyContext.get(c.getString(0)));
+            String code = c.getString(0);
+            BaseTransactionProvider.Companion.storeFractionDigits(db, code, currencyContext.get(code).getFractionDigits());
             c.moveToNext();
           }
         }
@@ -2075,9 +2079,9 @@ public class TransactionDatabase extends BaseTransactionDatabase {
         upgradeTo180(db);
       }
 
-      if (oldVersion < 181) {
+      /*if (oldVersion < 181) {
         createOrRefreshViews(db);
-      }
+      }*/
 
       if (oldVersion < 182) {
         upgradeTo182(db);
@@ -2087,12 +2091,28 @@ public class TransactionDatabase extends BaseTransactionDatabase {
         upgradeTo183(db);
       }
 
-      if (oldVersion < 184) {
+      /*if (oldVersion < 184) {
           createOrRefreshViews(db);
-      }
+      }*/
 
       if (oldVersion < 185) {
         upgradeTo185(db);
+      }
+
+      if (oldVersion < 186) {
+        upgradeTo186(db);
+      }
+
+      if (oldVersion < 187) {
+        upgradeTo187(db);
+      }
+
+      if (oldVersion < 188) {
+        createOrRefreshViews(db);
+      }
+
+      if (oldVersion < 189) {
+        upgradeTo189(db);
       }
 
       TransactionProvider.resumeChangeTrigger(db);

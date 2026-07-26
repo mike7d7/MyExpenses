@@ -235,7 +235,6 @@
     <string name="pref_category_title_more_information">Περισσότερες πληροφορίες</string>
     <string name="pref_category_title_ui">Σύνδεση, διεπαφή με τον χρήστη</string>
     <string name="pref_contrib_purchase_title_upgrade">Κλειδί αναβάθμισης</string>
-    <string name="pref_custom_currency_title">Προσαρμογή νομισμάτων</string>
     <string name="pref_enter_licence_title">Εισάγετε το κλειδί</string>
     <string name="pref_export_format_title"> Μορφή δεδομένων</string>
     <string name="pref_import_from_grisbi_summary">Κάνετε εισαγωγή κατηγοριών και μερών Grisbi XML</string>
@@ -1021,4 +1020,5 @@
     <string name="warning_unlink_transfer">Η επιλεγμένη μεταφορά θα αποσυνδεθεί: Θα αντικατασταθεί από απλές συναλλαγές και στους δύο λογαριασμούς.</string>
     <string name="menu_unlink_transfer">Αποσύνδεση μεταφοράς</string>
     <string name="supports_reconciliation">Υποστήριξη συμφωνίας λογαριασμών</string>
+    <string name="asset_quantity_at_price">%1$s στα %2$s</string>
 </resources>

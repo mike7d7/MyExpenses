@@ -53,6 +53,7 @@ enum class PrefKey(internal val resId: Int, internal val _key: String?) {
     CATEGORY_SECURITY(R.string.pref_category_security_key),
     CATEGORY_PROTECTION(R.string.pref_category_protection_key),
     CATEGORY_CURRENCIES(R.string.pref_category_currencies_key),
+    MANAGE_CURRENCIES(R.string.pref_manage_currencies_key),
     CATEGORY_PRICES(R.string.pref_category_prices_key),
     CATEGORY_ACCOUNT_LIST(R.string.pref_category_account_list_key),
     ACCOUNT_GROUPING(R.string.pref_account_grouping_key),
@@ -223,6 +224,7 @@ enum class PrefKey(internal val resId: Int, internal val _key: String?) {
     TELL_A_FRIEND(R.string.pref_tell_a_friend_key),
     FAB_STYLE(R.string.pref_fab_style_key),
     CONTENT_BASED_COLORS(R.string.pref_content_based_colors_key),
+    DEFAULT_ACTION(R.string.pref_default_action_key)
     ;
 
     @Deprecated("")

@@ -37,6 +37,7 @@ import org.totschnig.myexpenses.db2.deleteTemplate
 import org.totschnig.myexpenses.db2.entities.Transaction
 import org.totschnig.myexpenses.db2.getAccountFlags
 import org.totschnig.myexpenses.db2.getAccountTypes
+import org.totschnig.myexpenses.db2.getCategoryPath
 import org.totschnig.myexpenses.db2.getTransactionSum
 import org.totschnig.myexpenses.db2.loadAccountFlow
 import org.totschnig.myexpenses.db2.loadAggregateAccountFlow
@@ -63,6 +64,7 @@ import org.totschnig.myexpenses.provider.BaseTransactionProvider.Companion.ACCOU
 import org.totschnig.myexpenses.provider.KEY_ACCOUNTID
 import org.totschnig.myexpenses.provider.KEY_AMOUNT
 import org.totschnig.myexpenses.provider.KEY_DATE
+import org.totschnig.myexpenses.provider.KEY_IS_PORTFOLIO
 import org.totschnig.myexpenses.provider.KEY_OPENING_BALANCE
 import org.totschnig.myexpenses.provider.KEY_PARENTID
 import org.totschnig.myexpenses.provider.KEY_ROWID
@@ -72,6 +74,7 @@ import org.totschnig.myexpenses.provider.KEY_STATUS
 import org.totschnig.myexpenses.provider.KEY_SUM
 import org.totschnig.myexpenses.provider.KEY_TRANSACTIONID
 import org.totschnig.myexpenses.provider.KEY_TRANSFER_PEER
+import org.totschnig.myexpenses.provider.PORTFOLIO_NONE
 import org.totschnig.myexpenses.provider.STATUS_HELPER
 import org.totschnig.myexpenses.provider.TABLE_TRANSACTIONS
 import org.totschnig.myexpenses.provider.TransactionProvider.ACCOUNTS_MINIMAL_URI
@@ -98,6 +101,7 @@ import org.totschnig.myexpenses.viewmodel.ExportViewModel.Companion.EXPORT_HANDL
 import org.totschnig.myexpenses.viewmodel.data.AccountMinimal
 import org.totschnig.myexpenses.viewmodel.data.DateInfo
 import org.totschnig.myexpenses.viewmodel.data.DisplayDebt
+import org.totschnig.myexpenses.viewmodel.data.TransactionEditData
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -185,7 +189,7 @@ open class ContentResolvingAndroidViewModel(application: Application) :
         sortOrder: String? = null,
     ): Flow<List<AccountMinimal>> = contentResolver.observeQuery(
         if (withAggregates) ACCOUNTS_MINIMAL_URI_WITH_AGGREGATES else ACCOUNTS_MINIMAL_URI,
-        null, query, queryArgs, sortOrder, false
+        null, "$KEY_PARENTID IS NULL AND $KEY_IS_PORTFOLIO = $PORTFOLIO_NONE" + (query?.let { " AND $it" } ?: ""), queryArgs, sortOrder, false
     )
         .mapToList { AccountMinimal.fromCursor(localizedContext, it) }
 
@@ -468,6 +472,19 @@ open class ContentResolvingAndroidViewModel(application: Application) :
                 }
             )
         }
+    }
+
+    fun TransactionEditData.applyDefaultTransferCategory(): TransactionEditData {
+        return if (isTransfer) {
+            prefHandler.defaultTransferCategory?.let { id ->
+                repository.getCategoryPath(id)?.let { path ->
+                    copy(
+                        categoryId = id,
+                        categoryPath = path
+                    )
+                }
+            } ?: this
+        } else this
     }
 
     /*    fun loadDebugDebts(count: Int = 10) {

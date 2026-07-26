@@ -30,7 +30,7 @@ import org.totschnig.myexpenses.util.crashreporting.CrashHandler
 import timber.log.Timber
 import kotlin.math.pow
 
-const val DATABASE_VERSION = 185
+const val DATABASE_VERSION = 189
 
 private const val RAISE_UPDATE_SEALED_DEBT = "SELECT RAISE (FAIL, 'attempt to update sealed debt');"
 private const val RAISE_INCONSISTENT_CATEGORY_HIERARCHY =
@@ -168,7 +168,9 @@ val ACCOUNTS_CREATE =
         $KEY_FLAG integer references $TABLE_ACCOUNT_FLAGS($KEY_ROWID) NOT NULL default 0,
         $KEY_SEALED boolean default 0,
         $KEY_DYNAMIC boolean default 0,
+        $KEY_IS_PORTFOLIO boolean default 0,
         $KEY_BANK_ID integer references $TABLE_BANKS($KEY_ROWID) ON DELETE SET NULL,
+        $KEY_PARENTID integer references $TABLE_ACCOUNTS($KEY_ROWID) ON DELETE CASCADE,
         $KEY_BALANCE_TYPE not null check ($KEY_BALANCE_TYPE in (${BalanceType.JOIN})) default '${BalanceType.CURRENT.name}');"""
 
 const val BANK_CREATE = """
@@ -1188,6 +1190,45 @@ abstract class BaseTransactionDatabase(
         execSQL("ALTER TABLE accounts ADD COLUMN balance_type text not null check (balance_type in ('CURRENT','TOTAL','CLEARED','RECONCILED','DELTA')) default 'CURRENT'")
     }
 
+    fun SupportSQLiteDatabase.upgradeTo186() {
+        // 1. Enhance currency table for custom asset metadata
+        execSQL("ALTER TABLE $TABLE_CURRENCIES ADD COLUMN $KEY_FRACTION_DIGITS integer")
+        execSQL("ALTER TABLE $TABLE_CURRENCIES ADD COLUMN $KEY_SYMBOL text")
+        execSQL("ALTER TABLE $TABLE_CURRENCIES ADD COLUMN $KEY_COMMODITY_TYPE text")
+    }
+
+    fun SupportSQLiteDatabase.upgradeTo187() {
+        // 1. Add is_portfolio flag to accounts
+        execSQL("ALTER TABLE $TABLE_ACCOUNTS ADD COLUMN $KEY_IS_PORTFOLIO boolean default 0")
+        // 2. Add parent_id to accounts for hierarchy (Portfolio -> Asset)
+        execSQL("ALTER TABLE $TABLE_ACCOUNTS ADD COLUMN $KEY_PARENTID integer references $TABLE_ACCOUNTS($KEY_ROWID) ON DELETE CASCADE")
+    }
+
+    fun SupportSQLiteDatabase.upgradeTo189() {
+        query(table = TABLE_CURRENCIES, columns = arrayOf(KEY_CODE, KEY_SYMBOL, KEY_FRACTION_DIGITS)).use { cursor ->
+            cursor.asSequence.forEach {
+                val code = it.getString(KEY_CODE)
+                val dbSymbol = it.getStringOrNull(KEY_SYMBOL)
+                val dbFractionDigits = it.getIntOrNull(KEY_FRACTION_DIGITS)
+
+                val prefSymbol = prefHandler.getString(code + "CustomCurrencySymbol", null)
+                val prefFractionDigits = prefHandler.getInt(code + "CustomFractionDigits", -1)
+
+                val values = ContentValues()
+                if (dbSymbol == null && prefSymbol != null) {
+                    values.put(KEY_SYMBOL, prefSymbol)
+                }
+                if (dbFractionDigits == null && prefFractionDigits != -1) {
+                    values.put(KEY_FRACTION_DIGITS, prefFractionDigits)
+                }
+
+                if (values.size() > 0) {
+                    update(TABLE_CURRENCIES, values, "$KEY_CODE = ?", arrayOf(code))
+                }
+            }
+        }
+    }
+
     protected fun SupportSQLiteDatabase.createOrRefreshAccountTriggers() {
         execSQL("DROP TRIGGER IF EXISTS update_account_sync_null")
         execSQL("DROP TRIGGER IF EXISTS sort_key_default")
@@ -1354,7 +1395,7 @@ abstract class BaseTransactionDatabase(
         append("$TABLE_METHODS.$KEY_LABEL AS $KEY_METHOD_LABEL, ")
         append("$TABLE_METHODS.$KEY_ICON AS $KEY_METHOD_ICON")
         if (tableName != TABLE_CHANGES) {
-            append(", Tree.$KEY_PATH, Tree.$KEY_ICON, Tree.$KEY_TYPE, $KEY_COLOR, $KEY_CURRENCY, $KEY_SEALED, $KEY_EXCLUDE_FROM_TOTALS, $KEY_DYNAMIC")
+            append(", Tree.$KEY_PATH, Tree.$KEY_ICON, Tree.$KEY_TYPE, $KEY_COLOR, $KEY_CURRENCY, $KEY_SEALED, $KEY_EXCLUDE_FROM_TOTALS, $KEY_DYNAMIC, $KEY_IS_PORTFOLIO")
             append(", $TABLE_ACCOUNTS.$KEY_TYPE AS $KEY_ACCOUNT_TYPE")
             append(", $TABLE_ACCOUNTS.$KEY_LABEL AS $KEY_ACCOUNT_LABEL")
             append(", $TABLE_ACCOUNTS.$KEY_FLAG AS $KEY_FLAG")

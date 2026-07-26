@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,6 +41,7 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.SecondaryScrollableTabRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
@@ -67,6 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.booleanResource
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CollectionInfo
@@ -84,6 +87,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
@@ -98,14 +103,18 @@ import org.totschnig.myexpenses.compose.TEST_TAG_ACCOUNT_LABEL
 import org.totschnig.myexpenses.compose.TEST_TAG_BALANCE_AMOUNT
 import org.totschnig.myexpenses.compose.TEST_TAG_BALANCE_HEADER
 import org.totschnig.myexpenses.compose.TEST_TAG_CAB
-import org.totschnig.myexpenses.compose.TEST_TAG_FAB_TRANSACTIONS
+import org.totschnig.myexpenses.compose.TEST_TAG_DIALOG
+import org.totschnig.myexpenses.compose.TEST_TAG_FAB_MENU
 import org.totschnig.myexpenses.compose.TEST_TAG_PAGER
 import org.totschnig.myexpenses.compose.TooltipIconButton
+import org.totschnig.myexpenses.compose.accounts.AccountEvent
+import org.totschnig.myexpenses.compose.accounts.AccountEventHandler
 import org.totschnig.myexpenses.compose.accounts.AccountIndicator
 import org.totschnig.myexpenses.compose.accounts.AccountSummaryV2
 import org.totschnig.myexpenses.compose.conditional
 import org.totschnig.myexpenses.compose.main.AppEvent
 import org.totschnig.myexpenses.compose.main.AppEventHandler
+import org.totschnig.myexpenses.compose.main.FloatingActionButtonMenu
 import org.totschnig.myexpenses.compose.main.balanceForType
 import org.totschnig.myexpenses.compose.main.getBalanceContentDescription
 import org.totschnig.myexpenses.compose.main.icon
@@ -117,9 +126,11 @@ import org.totschnig.myexpenses.dialog.MenuItem
 import org.totschnig.myexpenses.model.AccountGroupingKey
 import org.totschnig.myexpenses.model.AccountType
 import org.totschnig.myexpenses.model.BalanceType
+import org.totschnig.myexpenses.model.CommodityType
 import org.totschnig.myexpenses.model.CurrencyUnit
 import org.totschnig.myexpenses.preference.PreferenceState
 import org.totschnig.myexpenses.util.convAmount
+import org.totschnig.myexpenses.util.enumValueOrDefault
 import org.totschnig.myexpenses.viewmodel.MyExpensesV2ViewModel
 import org.totschnig.myexpenses.viewmodel.data.BaseAccount
 import org.totschnig.myexpenses.viewmodel.data.FullAccount
@@ -148,6 +159,10 @@ fun TransactionScreen(
     windowInsets: WindowInsets = ScaffoldDefaults.contentWindowInsets,
     isFramed: Boolean,
     navigationIcon: @Composable () -> Unit = {},
+    allCurrencies: List<CurrencyUnit>,
+    isCurrencyUsed: suspend (String) -> Boolean = { false },
+    onCreateAsset: suspend (code: String, symbol: String, fractionDigits: Int, label: String?, commodityType: CommodityType) -> CurrencyUnit? = { _, _, _, _, _ -> null },
+    onAccountEvent: AccountEventHandler,
 ) {
     LaunchedEffect(Unit) {
         viewModel.setLastVisited(StartScreen.Transactions)
@@ -187,13 +202,14 @@ fun TransactionScreen(
     }
 
     val accountColor = Color(currentAccount.color(LocalResources.current))
+    var showTradeScreen by rememberSaveable { mutableStateOf<Action?>(null) }
 
     Scaffold(
         contentWindowInsets = windowInsets,
         containerColor = containerColor,
         topBar = {
             val isInSelectionMode = viewModel.selectionState.value.isNotEmpty()
-            val height = 52.dp  + 30.dp * (LocalDensity.current.fontScale -1)
+            val height = 52.dp + 30.dp * (LocalDensity.current.fontScale - 1)
             Crossfade(
                 targetState = isInSelectionMode,
                 label = "TopBarTransition"
@@ -253,21 +269,23 @@ fun TransactionScreen(
                         modifier = Modifier.height(height),
                         navigationIcon = navigationIcon,
                         title = {
+                            val isPortfolio = (currentAccount as? FullAccount)?.isPortfolio == true
                             BalanceHeader(
                                 modifier = Modifier.conditional(isFramed) {
                                     padding(start = 4.dp, top = 4.dp)
                                 },
                                 currentAccount = currentAccount,
-                                onDisplayBalanceTypeChange = { newType ->
+                                onDisplayBalanceTypeChange = if (isPortfolio) null else { newType ->
                                     viewModel.persistBalanceType(newType)
                                 },
                                 onCopyBalance = {
                                     onEvent(AppEvent.CopyToClipBoard(it))
                                 },
-                                onSetNewBalance = {
-                                    onEvent(AppEvent.MenuItemClicked(R.id.NEW_BALANCE_COMMAND))
+                                onSetNewBalance = if (isPortfolio) null else {
+                                    { onEvent(AppEvent.MenuItemClicked(R.id.NEW_BALANCE_COMMAND)) }
                                 },
-                                bankIcon = bankIcon
+                                bankIcon = bankIcon,
+                                onAccountEvent = onAccountEvent
                             )
                         },
                         actions = {
@@ -322,10 +340,10 @@ fun TransactionScreen(
         floatingActionButton = {
             val scope = rememberCoroutineScope()
 
-            if (currentAccount is FullAccount && (currentAccount as FullAccount).sealed) {
+            if ((currentAccount as? FullAccount)?.sealed == true) {
                 FloatingActionButton(
                     onClick = { },
-                    modifier = Modifier.testTag(TEST_TAG_FAB_TRANSACTIONS),
+                    modifier = Modifier.testTag(TEST_TAG_FAB_MENU),
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
                     elevation = FloatingActionButtonDefaults.elevation(
@@ -336,22 +354,38 @@ fun TransactionScreen(
                     Icon(Icons.Default.Lock, stringResource(R.string.account_closed))
                 }
             } else {
+                val isPortfolio = (currentAccount as? FullAccount)?.isPortfolio == true
+                val staticAction = if (isPortfolio) null  else
+                    viewModel.defaultAction.collectAsState("LastVisited").value
+                        .takeIf { it != "LastVisited" }
+                        ?.let {
+                            enumValueOrDefault(it, Action.Expense)
+                        }
+                val lastAction =
+                    if (isPortfolio) viewModel.lastActionPortfolio else viewModel.lastAction
                 FloatingActionButtonMenu(
-                    lastAction = viewModel.lastAction.flow.collectAsState(Action.Expense).value,
+                    primaryAction = staticAction ?: lastAction.flow.collectAsState(Action.Expense).value,
                     isStandard = viewModel.fabStyle.collectAsState(FabStyle.Standard).value == FabStyle.Standard,
                     containerColor = accountColor,
+                    actions = if (isPortfolio) Action.PORTFOLIO_ACTIONS else Action.STANDARD_ACTIONS
                 ) { action ->
 
-                    scope.launch {
-                        viewModel.lastAction.set(action)
+                    if (staticAction == null) {
+                        scope.launch {
+                            lastAction.set(action)
+                        }
                     }
 
-                    onEvent(
-                        AppEvent.CreateTransaction(
-                            action = action,
-                            transferEnabled = accountList.size > 1
+                    if (action in Action.PORTFOLIO_ACTIONS) {
+                        showTradeScreen = action
+                    } else {
+                        onEvent(
+                            AppEvent.CreateTransaction(
+                                action = action,
+                                transferEnabled = accountList.size > 1
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
@@ -423,7 +457,8 @@ fun TransactionScreen(
                         }
                     ) {
                         val density = LocalDensity.current
-                        val maxTabWidth = with(density) { MaterialTheme.typography.labelLarge.fontSize.toDp() } * 10
+                        val maxTabWidth =
+                            with(density) { MaterialTheme.typography.labelLarge.fontSize.toDp() } * 10
                         Timber.d("maxTabWidth: $maxTabWidth")
                         accountList.forEachIndexed { index, account ->
                             Tab(
@@ -481,6 +516,52 @@ fun TransactionScreen(
             }
         }
     }
+    showTradeScreen?.let { tradeAction ->
+        val isLarge = booleanResource(R.bool.isLarge)
+
+        Dialog(
+            onDismissRequest = { showTradeScreen = null },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = isLarge
+            )
+        ) {
+            Surface(
+                modifier = Modifier
+                    .testTag(TEST_TAG_DIALOG)
+                    .conditional(
+                        isLarge,
+                        ifTrue = { defaultMinSize(minHeight = 400.dp) },
+                        ifFalse = { fillMaxSize() }
+                    )
+            ) {
+                TradeScreen(
+                    onDismiss = { showTradeScreen = null },
+                    onSave = { intent, stayOpen ->
+                        onEvent(AppEvent.SaveTrade(intent))
+                        if (!stayOpen) showTradeScreen = null
+                    },
+                    reportingCurrency = currentAccount.currencyUnit,
+                    assets = allCurrencies,
+                    fundingAccounts = accountList
+                        .filterIsInstance<FullAccount>()
+                        .filter {
+                            !it.isPortfolio && it.currencyUnit.code == currentAccount.currencyUnit.code &&
+                                    it.id != currentAccount.id
+                        }
+                        .map {
+                            it.id to it.labelV2(LocalContext.current)
+                        },
+                    initialAction = tradeAction,
+                    onCreateAsset = onCreateAsset,
+                    isCurrencyUsed = isCurrencyUsed,
+                    portfolio = currentAccount as FullAccount,
+                    onLookupMatchingTransactions = { accountId, total, date, isBuy ->
+                        viewModel.findMatchingTransactions(accountId, total, date, currentAccount.currencyUnit, isBuy)
+                    }
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -499,9 +580,10 @@ private fun BalanceHeader(
     currentAccount: BaseAccount,
     modifier: Modifier = Modifier,
     bankIcon: (@Composable (Modifier, Long) -> Unit)? = null,
-    onDisplayBalanceTypeChange: (BalanceType) -> Unit = {},
+    onDisplayBalanceTypeChange: ((BalanceType) -> Unit)? = null,
     onCopyBalance: (String) -> Unit = {},
-    onSetNewBalance: () -> Unit = {},
+    onSetNewBalance: (() -> Unit)? = null,
+    onAccountEvent: AccountEventHandler
 ) {
     var isSummaryPopupVisible by rememberSaveable { mutableStateOf(false) }
 
@@ -509,7 +591,12 @@ private fun BalanceHeader(
         targetValue = if (isSummaryPopupVisible) 0F else 180F
     )
 
-    val displayBalance = currentAccount.balanceForType
+    val isPortfolio = (currentAccount as? FullAccount)?.isPortfolio == true
+    val displayBalance = if (isPortfolio) {
+        currentAccount.effectiveBalance
+    } else {
+        currentAccount.balanceForType
+    }
 
     Row(
         modifier = modifier
@@ -593,7 +680,8 @@ private fun BalanceHeader(
                             ) {
                                 AccountSummaryV2(
                                     currentAccount,
-                                    onDisplayBalanceTypeChange
+                                    onDisplayBalanceTypeChange,
+                                    onAccountEvent = onAccountEvent
                                 )
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -619,7 +707,7 @@ private fun BalanceHeader(
                                         Text(stringResource(R.string.copy_text))
                                     }
 
-                                    if (currentAccount is FullAccount) {
+                                    if (currentAccount is FullAccount && onSetNewBalance != null) {
                                         TextButton(onClick = {
                                             onSetNewBalance()
                                             isSummaryPopupVisible = false
@@ -719,5 +807,8 @@ fun HeaderPreview() {
             criterion = 5000,
             excludeFromTotals = true
         )
+        , onAccountEvent = object : AccountEventHandler {
+            override fun invoke(event: AccountEvent, account: FullAccount) {}
+        }
     )
 }

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="versions">
-        <item>859;4.1.0.pre;1963</item>
-        <item>858;4.0.9.1</item>
+        <item>869;4.1.0.1</item>
+        <item>868;4.1.0</item>
         <item>857;4.0.9</item>
         <item>851;4.0.8</item>
         <item>846;4.0.7</item>
@@ -106,6 +106,7 @@
     <string name="version_more_info_407">116450570746835831</string>
     <string name="version_more_info_408">116539859736344536</string>
     <string name="version_more_info_409">116633341553126335</string>
+    <string name="version_more_info_410">116937723305133542</string>
 
     <!-- Github -->
     <!-- Legacy -->
@@ -160,7 +161,7 @@
     <string name="project_board_407">177</string>
     <string name="project_board_408">185</string>
     <string name="project_board_409">187</string>
-    <string name="project_board_4091">188</string>
+    <string name="project_board_410">189</string>
 
     <string-array name="whats_new_361">
         <item>@string/whats_new_361_1</item>
@@ -228,7 +229,12 @@
     <string-array name="whats_new_407">
         <item>@string/whats_new_407</item>
     </string-array>
-    <string-array name="whats_new_4091">
-        <item>@string/bug_fixes</item>
+    <string-array name="whats_new_410">
+        <item>@string/contrib_feature_portfolio_tracking</item>
     </string-array>
+    <string-array name="whats_new_4101">
+        <item>@string/bug_fixes</item>
+        <item>@string/whats_new_4101</item>
+    </string-array>
+    <string name="whats_new_4101">Refinement of Trade import for portfolios</string>
 </resources>

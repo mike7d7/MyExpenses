@@ -44,6 +44,7 @@
         android:entries="@array/pref_ui_main_screen_version_values"
         android:entryValues="@array/pref_ui_main_screen_version_values"
         android:key="@string/pref_ui_main_screen_version_key"
+        my:isPreferenceVisible="false"
         my:useSimpleSummaryProvider="true"
         android:title="Version" />
 
@@ -63,6 +64,14 @@
         android:entryValues="@array/pref_start_screen_values"
         android:key="@string/pref_ui_start_screen_key"
         android:title="@string/pref_ui_start_screen_title"
+        my:useSimpleSummaryProvider="true" />
+
+    <ListPreference
+        android:defaultValue="LastVisited"
+        android:entries="@array/pref_default_action_entries"
+        android:entryValues="@array/pref_default_action_values"
+        android:key="@string/pref_default_action_key"
+        android:title="@string/default_action"
         my:useSimpleSummaryProvider="true" />
 
 

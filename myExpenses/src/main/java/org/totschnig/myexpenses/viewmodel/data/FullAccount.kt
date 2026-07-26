@@ -30,22 +30,22 @@ import org.totschnig.myexpenses.provider.KEY_CURRENT_BALANCE
 import org.totschnig.myexpenses.provider.KEY_DATE
 import org.totschnig.myexpenses.provider.KEY_DESCRIPTION
 import org.totschnig.myexpenses.provider.KEY_DYNAMIC
-import org.totschnig.myexpenses.provider.KEY_EQUIVALENT_CURRENT_BALANCE
 import org.totschnig.myexpenses.provider.KEY_EQUIVALENT_EXPENSES
 import org.totschnig.myexpenses.provider.KEY_EQUIVALENT_INCOME
 import org.totschnig.myexpenses.provider.KEY_EQUIVALENT_OPENING_BALANCE
-import org.totschnig.myexpenses.provider.KEY_EQUIVALENT_TOTAL
 import org.totschnig.myexpenses.provider.KEY_EQUIVALENT_TRANSFERS
 import org.totschnig.myexpenses.provider.KEY_EXCHANGE_RATE
 import org.totschnig.myexpenses.provider.KEY_EXCLUDE_FROM_TOTALS
 import org.totschnig.myexpenses.provider.KEY_GROUPING
 import org.totschnig.myexpenses.provider.KEY_HAS_CLEARED
 import org.totschnig.myexpenses.provider.KEY_HAS_FUTURE
+import org.totschnig.myexpenses.provider.KEY_IS_PORTFOLIO
 import org.totschnig.myexpenses.provider.KEY_LABEL
 import org.totschnig.myexpenses.provider.KEY_LAST_USED
 import org.totschnig.myexpenses.provider.KEY_LATEST_EXCHANGE_RATE
 import org.totschnig.myexpenses.provider.KEY_LATEST_EXCHANGE_RATE_DATE
 import org.totschnig.myexpenses.provider.KEY_OPENING_BALANCE
+import org.totschnig.myexpenses.provider.KEY_PARENTID
 import org.totschnig.myexpenses.provider.KEY_RECONCILED_TOTAL
 import org.totschnig.myexpenses.provider.KEY_ROWID
 import org.totschnig.myexpenses.provider.KEY_SEALED
@@ -57,14 +57,23 @@ import org.totschnig.myexpenses.provider.KEY_SUM_TRANSFERS
 import org.totschnig.myexpenses.provider.KEY_SYNC_ACCOUNT_NAME
 import org.totschnig.myexpenses.provider.KEY_TOTAL
 import org.totschnig.myexpenses.provider.KEY_UUID
+import org.totschnig.myexpenses.provider.KEY_VISIBLE
+import org.totschnig.myexpenses.provider.PORTFOLIO_ASSET
+import org.totschnig.myexpenses.provider.PORTFOLIO_CASH
+import org.totschnig.myexpenses.provider.PORTFOLIO_CONTAINER
+import org.totschnig.myexpenses.provider.PORTFOLIO_NONE
 import org.totschnig.myexpenses.provider.getBoolean
+import org.totschnig.myexpenses.provider.getBooleanIfExists
 import org.totschnig.myexpenses.provider.getDouble
+import org.totschnig.myexpenses.provider.getDoubleIfExists
 import org.totschnig.myexpenses.provider.getDoubleOrNull
 import org.totschnig.myexpenses.provider.getEnum
 import org.totschnig.myexpenses.provider.getEnumIfExists
 import org.totschnig.myexpenses.provider.getInt
+import org.totschnig.myexpenses.provider.getIntIfExists
 import org.totschnig.myexpenses.provider.getLocalDate
 import org.totschnig.myexpenses.provider.getLong
+import org.totschnig.myexpenses.provider.getLongIfExists
 import org.totschnig.myexpenses.provider.getLongOrNull
 import org.totschnig.myexpenses.provider.getString
 import org.totschnig.myexpenses.provider.getStringOrNull
@@ -116,7 +125,9 @@ data class AggregateAccount(
     val clearedTotal: Long = 0L,
     val hasCleared: Boolean = false,
     override val total: Long? = null,
-    override val equivalentTotal: Long = total ?: 0,
+    override val equivalentTotal: Long? = total,
+    val parentId: Long? = null,
+    val isPortfolio: Boolean = false,
     override val accountGrouping: AccountGrouping<*>,
     override val balanceType: BalanceType = BalanceType.CURRENT,
 ) : BaseAccount() {
@@ -147,10 +158,25 @@ data class AggregateAccount(
         currentBalance = currentBalance ?: equivalentCurrentBalance,
         color = color(context.resources),
         label = labelV2(context),
+        parentId = null,
+        isPortfolio = false,
         accountGrouping = accountGrouping,
         isSingCurrency = isSingleCurrency
     )
 }
+
+data class BalanceData(
+    val assets: List<BalanceSection>,
+    val totalAssets: Long,
+    val liabilities: List<BalanceSection>,
+    val totalLiabilities: Long,
+)
+
+data class BalanceSection(
+    val type: AccountType,
+    val total: Long,
+    val accounts: List<FullAccount>,
+)
 
 @Stable
 data class FullAccount(
@@ -190,7 +216,13 @@ data class FullAccount(
     val initialExchangeRate: Double? = null,
     val latestExchangeRate: Pair<LocalDate, Double>? = null,
     val dynamic: Boolean = false,
+    val parentId: Long? = null,
+    val portfolioRole: Int = PORTFOLIO_NONE,
+    val isVisible: Boolean = true,
+    val children: List<FullAccount> = emptyList(),
     override val isSingleCurrency: Boolean = true,
+    val childrenValuation: Long = 0,
+    val equivalentChildrenValuation: Long = childrenValuation,
 ) : BaseAccount(), AccountWithGroupingKey {
 
     override val accountGrouping: AccountGrouping<*>? = null
@@ -200,6 +232,18 @@ data class FullAccount(
     override fun color(resources: Resources) = if (isAggregate) aggregateColor(resources) else color
 
     override fun labelV2(context: Context) = label
+
+    val effectiveBalance
+        get() = currentBalance + childrenValuation
+    val equivalentEffectiveBalance
+        get() = equivalentCurrentBalance + equivalentChildrenValuation
+
+    val isPortfolio: Boolean
+        get() = portfolioRole == PORTFOLIO_CONTAINER
+    val isPortfolioAsset: Boolean
+        get() = portfolioRole == PORTFOLIO_ASSET
+    val isPortfolioCash: Boolean
+        get() = portfolioRole == PORTFOLIO_CASH
 
     val toPageAccount: PageAccount
         get() = PageAccount(
@@ -215,6 +259,8 @@ data class FullAccount(
             currentBalance = currentBalance,
             color = color,
             label = label,
+            parentId = parentId,
+            isPortfolio = isPortfolio,
             accountGrouping = null,
             isSingCurrency = isSingleCurrency
         )
@@ -246,6 +292,7 @@ data class FullAccount(
                 .takeIf { it == KEY_DATE || it == KEY_AMOUNT }
                 ?: KEY_DATE
             val id = getLong(KEY_ROWID)
+            val portfolioRole = getIntIfExists(KEY_IS_PORTFOLIO) ?: PORTFOLIO_NONE
             return FullAccount(
                 id = id,
                 label = getString(KEY_LABEL),
@@ -273,25 +320,95 @@ data class FullAccount(
                 uuid = getStringOrNull(KEY_UUID),
                 criterion = getLong(KEY_CRITERION).takeIf { it != 0L },
                 total = if (getBoolean(KEY_HAS_FUTURE)) getLong(KEY_TOTAL) else null,
-                equivalentTotal = if (getBoolean(KEY_HAS_FUTURE)) getDouble(KEY_EQUIVALENT_TOTAL).roundToLong() else null,
                 excludeFromTotals = getBoolean(KEY_EXCLUDE_FROM_TOTALS),
                 lastUsed = getLong(KEY_LAST_USED),
                 bankId = getLongOrNull(KEY_BANK_ID),
-                equivalentOpeningBalance = getLong(KEY_EQUIVALENT_OPENING_BALANCE),
-                equivalentCurrentBalance = getDouble(KEY_EQUIVALENT_CURRENT_BALANCE).roundToLong(),
+                equivalentOpeningBalance = getDouble(KEY_EQUIVALENT_OPENING_BALANCE).roundToLong(),
                 equivalentSumIncome = getLong(KEY_EQUIVALENT_INCOME),
                 equivalentSumExpense = getLong(KEY_EQUIVALENT_EXPENSES),
                 equivalentSumTransfer = getLong(KEY_EQUIVALENT_TRANSFERS),
                 initialExchangeRate = getDoubleOrNull(KEY_EXCHANGE_RATE),
-                latestExchangeRate = getDoubleOrNull(KEY_LATEST_EXCHANGE_RATE)?.let {
+                latestExchangeRate = getDoubleIfExists(KEY_LATEST_EXCHANGE_RATE)?.let {
                     getLocalDate(KEY_LATEST_EXCHANGE_RATE_DATE) to it
                 },
                 dynamic = getBoolean(KEY_DYNAMIC),
-                balanceType = getEnumIfExists(KEY_BALANCE_TYPE, BalanceType.CURRENT),
+                balanceType = if (portfolioRole == PORTFOLIO_CONTAINER) BalanceType.VALUATION else getEnumIfExists(KEY_BALANCE_TYPE, BalanceType.CURRENT),
+                parentId = getLongIfExists(KEY_PARENTID),
+                isVisible = getBooleanIfExists(KEY_VISIBLE) ?: true,
+                portfolioRole = portfolioRole,
                 //in V2 this is only called for real accounts, in V1 we need to set isSingleCurrency to false for home aggregate
                 isSingleCurrency = !isHomeAggregate(id)
             )
         }
+
+        fun List<FullAccount>.partitionByAccountType(): BalanceData = groupBy { it.type }
+            .map { entry ->
+                BalanceSection(
+                    type = entry.key,
+                    total = entry.value.sumOf { it.equivalentEffectiveBalance },
+                    accounts = entry.value
+                )
+            }
+            .partition { it.type.isAsset }.let { pair ->
+                BalanceData(
+                    totalAssets = pair.first.sumOf { it.total },
+                    assets = pair.first,
+                    totalLiabilities = pair.second.sumOf { it.total },
+                    liabilities = pair.second
+                )
+            }
+
+
+        fun List<FullAccount>.nest(): List<FullAccount> {
+            val accountMap = associateBy { it.id }
+            val roots = mutableListOf<FullAccount>()
+            val childrenMap = mutableMapOf<Long, MutableList<FullAccount>>()
+
+            forEach { account ->
+                val parentId = account.parentId
+                if (parentId != null && accountMap.containsKey(parentId)) {
+                    childrenMap.getOrPut(parentId) { mutableListOf() }.add(account)
+                } else {
+                    roots.add(account)
+                }
+            }
+
+            return roots.map { root ->
+                root.copy(children = childrenMap[root.id] ?: emptyList())
+            }
+        }
+
+    }
+
+    fun enrich(
+        priceMap: Map<Pair<String, String>, Pair<LocalDate, Double>>,
+        homeCurrency: CurrencyUnit,
+    ): FullAccount {
+        val enrichedChildren = children.map { it.enrich(priceMap, currencyUnit) }
+
+        val latestExchangeRate = when {
+            currencyUnit == homeCurrency -> LocalDate.now() to 1.0
+
+            dynamic -> priceMap[currencyUnit.code to homeCurrency.code]
+            else -> null
+        } ?: (LocalDate.now() to (initialExchangeRate ?: 1.0))
+
+        val childrenValuation = if (isPortfolio) {
+            enrichedChildren.sumOf { child ->
+               child.equivalentCurrentBalance
+            }
+        } else 0L
+
+        val equivalentChildrenValuation = (childrenValuation * latestExchangeRate.second).roundToLong()
+
+        // 4. Update the account instance with calculated valuations and equivalents
+        return this.copy(
+            children = enrichedChildren,
+            latestExchangeRate = latestExchangeRate,
+            equivalentCurrentBalance = (currentBalance * latestExchangeRate.second).roundToLong(),
+            childrenValuation = childrenValuation,
+            equivalentChildrenValuation = equivalentChildrenValuation
+        )
     }
 }
 
@@ -308,6 +425,8 @@ data class PageAccount(
     val openingBalance: Long = 0,
     val currentBalance: Long = 0,
     val label: String,
+    val parentId: Long? = null,
+    val isPortfolio: Boolean = false,
     //not null for aggregate accounts
     override val accountGrouping: AccountGrouping<*>? = null,
     val color: Int = -1,

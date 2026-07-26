@@ -244,7 +244,6 @@
     <string name="pref_category_title_more_information">More information</string>
     <string name="pref_category_title_ui">User interface</string>
     <string name="pref_contrib_purchase_title_upgrade">Upgrade key</string>
-    <string name="pref_custom_currency_title">Customize currencies</string>
     <string name="pref_enter_licence_title">Enter key</string>
     <string name="pref_export_format_title">Data format</string>
     <string name="pref_import_from_grisbi_summary">Import categories and parties from Grisbi XML file</string>
@@ -1065,6 +1064,11 @@
         <item quantity="one">%d line could not be processed.</item>
         <item quantity="other">%d lines could not be processed.</item>
     </plurals>
+    <!--Message is shown when user tries to import trades into a portfolio, but assets traded have not been set up. -->
+    <plurals name="import_trades_missing_assets_message">
+        <item quantity="one">%1$d line refers to unknown assets: %2$s.</item>
+        <item quantity="other">%1$d lines refer to unknown assets: %2$s.</item>
+    </plurals>
     <!-- Placeholder: 1 will be replaced with the description of the price pair, e.g. EUR:USD, 2 will be replaced with file name -->
     <string name="confirm_process_file_message">Are you sure you want to import prices for \'%1$s\' from \'%2$s\'? New prices may affect existing equivalent amounts.</string>
     <string name="warning_expense_category_credit">You are assigning an expense category to an income transaction. As a consequence, the transaction will reduce the sum of your expenses, and by default will be shown in red.</string>
@@ -1138,4 +1142,33 @@
     <string name="pref_content_based_colors_summary">Derive theme colors from the current account\'s color. Turn off if text is difficult to read.</string>
     <!-- Shown to user while Web User Interface is starting -->
     <string name="service_starting">Starting…</string>
+    <string name="trade_buy">Buy</string>
+    <string name="trade_sell">Sell</string>
+    <string name="trade_quantity">Quantity</string>
+    <string name="trade_price">Price</string>
+    <string name="trade_fee">Fee</string>
+    <string name="trade_target_asset">Asset</string>
+    <!-- Label for the action to create a new portfolio, which is a container for investment assets and cash -->
+    <string name="menu_create_portfolio">New portfolio</string>
+    <!-- Label for the category of fiat currencies (e.g., USD, EUR). Plural. -->
+    <string name="asset_type_fiat_plural">Currencies</string>
+    <!-- Label for a financial security (e.g., a stock, bond, or option) in the singular. -->
+    <string name="asset_type_security">Security</string>
+    <!-- Label for a financial security (e.g., a stock, bond, or option) in the singular. -->
+    <string name="asset_type_security_plural">Securities</string>
+    <!-- Collective noun for cryptocurrencies (e.g., Bitcoin, Ethereum). Translators should use the common local term for this asset class. -->
+    <string name="asset_type_crypto">Crypto</string>
+    <!-- On the Screen, where Trades are recording, this refers to the dropdown for selecting how the cost is funded, or where the proceeds should land -->
+    <string name="trade_funding_source">Funding Source</string>
+    <!-- Option in the "Funding Source" selector for a trade, referring to the cash balance held within the portfolio itself. -->
+    <string name="trade_funding_portfolio">Portfolio Cash</string>
+    <string name="trade_funding_external_description">Funds from sources not tracked in this app</string>
+    <string name="trade_deposit">Deposit</string>
+    <string name="trade_withdraw">Withdrawal</string>
+    <string name="trade_matching_transaction_found">Matching transaction found in funding account. Select to link:</string>
+    <!-- Label for asset valuation: %1$s: Quantity, %2$s: Unit price in portfolio currency (e.g., "150.00 USD") -->
+    <string name="asset_quantity_at_price">%1$s @ %2$s</string>
+    <string name="contrib_feature_portfolio_tracking">Portfolio tracking</string>
+    <string name="premium_nudge_portfolio_title">Unlock full portfolio potential</string>
+    <string name="premium_nudge_portfolio_message">You can manage one portfolio for free. Upgrade to manage multiple portfolios and unlock advanced tracking features.</string>
 </resources>

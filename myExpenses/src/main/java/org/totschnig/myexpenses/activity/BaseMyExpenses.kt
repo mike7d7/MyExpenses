@@ -49,6 +49,8 @@ import org.totschnig.myexpenses.compose.transactions.FutureCriterion
 import org.totschnig.myexpenses.compose.transactions.ItemRenderer
 import org.totschnig.myexpenses.compose.transactions.NewTransactionRenderer
 import org.totschnig.myexpenses.compose.transactions.RenderType
+import org.totschnig.myexpenses.compose.transactions.TradeEvent
+import org.totschnig.myexpenses.compose.transactions.TradeList
 import org.totschnig.myexpenses.compose.transactions.TransactionEvent
 import org.totschnig.myexpenses.compose.transactions.TransactionEventHandler
 import org.totschnig.myexpenses.compose.transactions.TransactionList
@@ -80,7 +82,6 @@ import org.totschnig.myexpenses.model.KEY_ACCOUNT_GROUPING
 import org.totschnig.myexpenses.model.KEY_ACCOUNT_GROUPING_GROUP
 import org.totschnig.myexpenses.model.Money
 import org.totschnig.myexpenses.model.PreDefinedPaymentMethod.Companion.translateIfPredefined
-import org.totschnig.myexpenses.model.sort.Sort
 import org.totschnig.myexpenses.preference.ColorSource
 import org.totschnig.myexpenses.preference.PrefKey
 import org.totschnig.myexpenses.provider.DataBaseAccount.Companion.isAggregate
@@ -129,19 +130,27 @@ import org.totschnig.myexpenses.viewmodel.ContentResolvingAndroidViewModel.Delet
 import org.totschnig.myexpenses.viewmodel.ExportViewModel
 import org.totschnig.myexpenses.viewmodel.KEY_ROW_IDS
 import org.totschnig.myexpenses.viewmodel.ModalProgressViewModel
+import org.totschnig.myexpenses.viewmodel.MyExpensesV2ViewModel
 import org.totschnig.myexpenses.viewmodel.MyExpensesViewModel
 import org.totschnig.myexpenses.viewmodel.MyExpensesViewModel.SelectionInfo
 import org.totschnig.myexpenses.viewmodel.OpenAction
 import org.totschnig.myexpenses.viewmodel.ShareAction
 import org.totschnig.myexpenses.viewmodel.SumInfo
 import org.totschnig.myexpenses.viewmodel.UpgradeHandlerViewModel
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import org.totschnig.myexpenses.compose.main.AppEvent
+import org.totschnig.myexpenses.compose.transactions.TradeScreen
+import org.totschnig.myexpenses.model.CurrencyUnit
 import org.totschnig.myexpenses.viewmodel.data.AggregateAccount
+import org.totschnig.myexpenses.viewmodel.data.Trade
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import org.totschnig.myexpenses.viewmodel.data.BaseAccount
 import org.totschnig.myexpenses.viewmodel.data.FullAccount
 import org.totschnig.myexpenses.viewmodel.data.HeaderDataEmpty
 import org.totschnig.myexpenses.viewmodel.data.PageAccount
 import org.totschnig.myexpenses.viewmodel.data.Transaction2
-import org.totschnig.myexpenses.viewmodel.getNaturalComparator
 import timber.log.Timber
 import java.io.Serializable
 import java.math.BigDecimal
@@ -395,7 +404,7 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
 
     }
 
-    protected fun editAccount(account: FullAccount) {
+    protected open fun editAccount(account: FullAccount) {
         startActivity(Intent(this, AccountEdit::class.java).apply {
             putExtra(KEY_ROWID, account.id)
             putExtra(KEY_COLOR, account.color)
@@ -1130,11 +1139,12 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
         val hasTransfer = selectionState.any { it.isTransfer }
         val hasSplit = selectionState.any { it.isSplit }
         val hasVoid = selectionState.any { it.crStatus == CrStatus.VOID }
+        val hasTrade = selectionState.any { it.isPortfolio }
         return when (itemId) {
-            R.id.REMAP_ACCOUNT_COMMAND -> accountCount > 1
-            R.id.REMAP_PAYEE_COMMAND -> !hasTransfer
+            R.id.REMAP_ACCOUNT_COMMAND -> accountCount > 1 && !hasTrade
+            R.id.REMAP_PAYEE_COMMAND -> !hasTransfer && !hasTrade
             R.id.REMAP_CATEGORY_COMMAND -> !hasSplit
-            R.id.REMAP_METHOD_COMMAND -> !hasTransfer
+            R.id.REMAP_METHOD_COMMAND -> !hasTransfer && !hasTrade
             R.id.SPLIT_TRANSACTION_COMMAND -> !hasSplit && !hasVoid
             R.id.LINK_TRANSFER_COMMAND ->
                 selectionState.count() == 2 &&
@@ -1148,7 +1158,8 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
 
     fun BaseAccount?.isMenuItemVisible(itemId: Int): Boolean {
         val isReal = this is FullAccount && !isAggregate
-        return when (itemId) {
+        return if ((this as? FullAccount)?.isPortfolio == true) itemId == R.id.IMPORT_TRADES_COMMAND
+        else when (itemId) {
             R.id.SYNC_COMMAND -> (this as? FullAccount)?.syncAccountName != null
             R.id.HISTORY_COMMAND, R.id.RESET_COMMAND, R.id.PRINT_COMMAND -> hasItems
             R.id.DISTRIBUTION_COMMAND -> sumInfo.value.mappedCategories
@@ -1398,6 +1409,87 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
     val hasItems
         get() = sumInfo.value.hasItems
 
+    private fun handleTransactionEvent(
+        event: TransactionEvent,
+        transaction: Transaction2,
+        isCurrentPage: Boolean,
+    ) {
+        if (!isCurrentPage) return
+        when (event) {
+            TransactionEvent.ShowDetails -> {
+                showDetails(
+                    transaction.id,
+                    transaction.isArchive,
+                    currentFilter.takeIf { transaction.isArchive },
+                    currentAccount?.sortOrder.takeIf { transaction.isArchive }
+                )
+            }
+
+            TransactionEvent.UnArchive -> unarchive(transaction.id)
+            TransactionEvent.Delete -> lifecycleScope.launch {
+                if (transaction.isArchive) {
+                    deleteArchive(transaction)
+                } else {
+                    delete(listOf(transaction.id to transaction.crStatus))
+                }
+            }
+
+            TransactionEvent.Edit -> edit(transaction, false)
+            TransactionEvent.Clone -> edit(transaction, true)
+            TransactionEvent.CreateTemplate -> createTemplate(transaction)
+            TransactionEvent.UnDelete -> undelete(listOf(transaction.id))
+            TransactionEvent.Select -> viewModel.selectionState.value =
+                listOf(SelectionInfo(transaction))
+
+            TransactionEvent.Ungroup -> ungroupSplit(transaction)
+            TransactionEvent.Unlink -> unlinkTransfer(transaction)
+            TransactionEvent.TransformToTransfer -> transformToTransfer(
+                transaction
+            )
+
+            TransactionEvent.AddFilterCategory -> addFilterCriterion(
+                CategoryCriterion(
+                    transaction.categoryPath!!,
+                    transaction.catId!!
+                )
+            )
+
+            TransactionEvent.AddFilterPayee -> addFilterCriterion(
+                PayeeCriterion(
+                    transaction.party!!.name,
+                    transaction.party.id!!
+                )
+            )
+
+            TransactionEvent.AddFilterAmount -> addFilterCriterion(
+                AmountCriterion(
+                    operation = Operation.EQ,
+                    values = listOf(transaction.displayAmount.amountMinor),
+                    currency = transaction.displayAmount.currencyUnit.code,
+                    sign = transaction.displayAmount.amountMinor > 0
+                )
+            )
+
+            TransactionEvent.AddFilterMethod -> addFilterCriterion(
+                MethodCriterion(
+                    transaction.methodLabel!!.translateIfPredefined(this@BaseMyExpenses),
+                    transaction.methodId!!
+                )
+            )
+
+            TransactionEvent.AddFilterTag -> addFilterCriterion(
+                TagCriterion(
+                    transaction.tagList.joinToString { it.second },
+                    transaction.tagList.map { it.first }
+                )
+            )
+
+            TransactionEvent.AddFilterComment -> addFilterCriterion(
+                CommentCriterion(transaction.comment)
+            )
+        }
+    }
+
     @Composable
     fun Page(
         account: PageAccount,
@@ -1557,81 +1649,8 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
                     onSelectAllListTooLarge = { selectAllListTooLarge() },
                     onEvent = object : TransactionEventHandler {
                         override fun invoke(event: TransactionEvent, transaction: Transaction2) {
-                            when (event) {
-                                TransactionEvent.ShowDetails -> {
-                                    showDetails(
-                                        transaction.id,
-                                        transaction.isArchive,
-                                        currentFilter.takeIf { transaction.isArchive },
-                                        currentAccount?.sortOrder.takeIf { transaction.isArchive }
-                                    )
-                                }
-
-                                TransactionEvent.UnArchive -> unarchive(transaction.id)
-                                TransactionEvent.Delete -> lifecycleScope.launch {
-                                    if (transaction.isArchive) {
-                                        deleteArchive(transaction)
-                                    } else {
-                                        delete(listOf(transaction.id to transaction.crStatus))
-                                    }
-                                }
-
-                                TransactionEvent.Edit -> edit(transaction, false)
-                                TransactionEvent.Clone -> edit(transaction, true)
-                                TransactionEvent.CreateTemplate -> createTemplate(transaction)
-                                TransactionEvent.UnDelete -> undelete(listOf(transaction.id))
-                                TransactionEvent.Select -> viewModel.selectionState.value =
-                                    listOf(SelectionInfo(transaction))
-
-                                TransactionEvent.Ungroup -> ungroupSplit(transaction)
-                                TransactionEvent.Unlink -> unlinkTransfer(transaction)
-                                TransactionEvent.TransformToTransfer -> transformToTransfer(
-                                    transaction
-                                )
-
-                                TransactionEvent.AddFilterCategory -> addFilterCriterion(
-                                    CategoryCriterion(
-                                        transaction.categoryPath!!,
-                                        transaction.catId!!
-                                    )
-                                )
-
-                                TransactionEvent.AddFilterPayee -> addFilterCriterion(
-                                    PayeeCriterion(
-                                        transaction.party!!.name,
-                                        transaction.party.id!!
-                                    )
-                                )
-
-                                TransactionEvent.AddFilterAmount -> addFilterCriterion(
-                                    AmountCriterion(
-                                        operation = Operation.EQ,
-                                        values = listOf(transaction.displayAmount.amountMinor),
-                                        currency = transaction.displayAmount.currencyUnit.code,
-                                        sign = transaction.displayAmount.amountMinor > 0
-                                    )
-                                )
-
-                                TransactionEvent.AddFilterMethod -> addFilterCriterion(
-                                    MethodCriterion(
-                                        transaction.methodLabel!!.translateIfPredefined(this@BaseMyExpenses),
-                                        transaction.methodId!!
-                                    )
-                                )
-
-                                TransactionEvent.AddFilterTag -> addFilterCriterion(
-                                    TagCriterion(
-                                        transaction.tagList.joinToString { it.second },
-                                        transaction.tagList.map { it.first }
-                                    )
-                                )
-
-                                TransactionEvent.AddFilterComment -> addFilterCriterion(
-                                    CommentCriterion(transaction.comment)
-                                )
-                            }
+                            handleTransactionEvent(event, transaction, isCurrentPage)
                         }
-
                     },
                     futureCriterion = viewModel.futureCriterion.collectAsState(initial = FutureCriterion.EndOfDay).value,
                     expansionHandler = viewModel.expansionHandlerForTransactionGroups(account),
@@ -1643,7 +1662,7 @@ abstract class BaseMyExpenses<T : MyExpensesViewModel> : LaunchActivity(),
                     renderer = renderer.value,
                     isFiltered = filter.value != null,
                     splitInfoResolver = {
-                        viewModel.splitInfo(it)
+                        viewModel.resolveExtraInfo(it)
                     },
                     windowInsets = transactionListWindowInsets,
                     modificationsAllowed = modificationAllowed,

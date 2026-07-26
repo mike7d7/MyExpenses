@@ -29,6 +29,7 @@ import org.totschnig.myexpenses.provider.KEY_DESCRIPTION
 import org.totschnig.myexpenses.provider.KEY_DYNAMIC
 import org.totschnig.myexpenses.provider.KEY_EXCHANGE_RATE
 import org.totschnig.myexpenses.provider.KEY_EXCLUDE_FROM_TOTALS
+import org.totschnig.myexpenses.provider.KEY_IS_PORTFOLIO
 import org.totschnig.myexpenses.provider.KEY_LABEL
 import org.totschnig.myexpenses.provider.KEY_LAST_USED
 import org.totschnig.myexpenses.provider.KEY_OPENING_BALANCE
@@ -161,11 +162,19 @@ fun Repository.loadAggregateAccountFlowV2(extras: Bundle): Flow<Account> {
         Account(
             id = 0,
             label = label,
-            currency = if (accountGrouping == AccountGrouping.CURRENCY) group else  it.getString(KEY_CURRENCY),
+            currency = if (accountGrouping == AccountGrouping.CURRENCY) group else it.getString(
+                KEY_CURRENCY
+            ),
             openingBalance = it.getLong(KEY_OPENING_BALANCE),
-            type = if (accountGrouping == AccountGrouping.TYPE) AccountType(id = group.toLong(), name = label) else null,
+            type = if (accountGrouping == AccountGrouping.TYPE) AccountType(
+                id = group.toLong(),
+                name = label
+            ) else null,
             accountGrouping = accountGrouping,
-            flag = if (accountGrouping == AccountGrouping.FLAG) AccountFlag(id = group.toLong(), label = label) else null,
+            flag = if (accountGrouping == AccountGrouping.FLAG) AccountFlag(
+                id = group.toLong(),
+                label = label
+            ) else null,
         )
     }
 }
@@ -190,6 +199,10 @@ fun Account.toContentValues() = ContentValues().apply {
         put(KEY_BANK_ID, it)
     }
     put(KEY_DYNAMIC, dynamicExchangeRates)
+    put(KEY_PARENTID, parentId)
+    put(
+        KEY_IS_PORTFOLIO, portfolioRole
+    )
 }
 
 fun Repository.createAccount(account: Account): Account {
